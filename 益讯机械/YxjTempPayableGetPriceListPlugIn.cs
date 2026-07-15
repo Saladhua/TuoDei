@@ -190,9 +190,8 @@ namespace kingdee.CustLI.Business.PlugIn
 
             Dictionary<string, decimal?> priceMap = PriceListQueryHelper.GetLatestTaxPrice(this.Context, reqs);
 
-            // 6. 写回含税单价(TaxPrice)及相关金额字段，并记录发生变更的单据
+            // 6. 写回含税单价(TaxPrice)，记录发生变更的单据
             int filledCount = 0;
-            const decimal taxRate = 0.13m;
 
             foreach (var r in refs)
             {
@@ -206,18 +205,7 @@ namespace kingdee.CustLI.Business.PlugIn
 
                 if (priceMap.TryGetValue(PriceListQueryHelper.BuildKey(req), out decimal? price) && price.HasValue)
                 {
-                    decimal taxPrice = price.Value;
-                    decimal unitPrice = Math.Round(taxPrice / (1m + taxRate), 6);
-                    decimal qty = (r.Entry["PriceQty"] == null) ? 0m : Convert.ToDecimal(r.Entry["PriceQty"]);
-                    decimal allAmount = Math.Round(qty * taxPrice, 2);
-                    decimal noTaxAmount = Math.Round(qty * unitPrice, 2);
-
-                    r.Entry["TaxPrice"] = taxPrice;
-                    r.Entry["FPrice"] = unitPrice;
-                    r.Entry["FALLAMOUNTFOR_D"] = allAmount;
-                    r.Entry["FNoTaxAmountFor_D"] = noTaxAmount;
-                    r.Entry["FTAXAMOUNTFOR_D"] = Math.Round(allAmount - noTaxAmount, 2);
-
+                    r.Entry["TaxPrice"] = price.Value;
                     changedBills.Add(r.Bill);
                     filledCount++;
                 }
@@ -234,22 +222,6 @@ namespace kingdee.CustLI.Business.PlugIn
                     this.View.ShowMessage("未在采购价目表中匹配到对应价格，未更新任何单据。");
                 }
                 return;
-            }
-
-            // 6b. 更新表头价税合计：汇总所有行的 FALLAMOUNTFOR_D
-            foreach (DynamicObject bill in changedBills)
-            {
-                var entries = bill["AP_PAYABLEENTRY"] as DynamicObjectCollection;
-                if (entries == null) continue;
-
-                decimal headerTotal = 0m;
-                foreach (DynamicObject entry in entries)
-                {
-                    headerTotal += (entry["FALLAMOUNTFOR_D"] == null)
-                        ? 0m
-                        : Convert.ToDecimal(entry["FALLAMOUNTFOR_D"]);
-                }
-                bill["FALLAMOUNTFOR"] = Math.Round(headerTotal, 2);
             }
 
             // 7. 走标准保存：触发值更新（刷新 税额 / 价税合计 等）并落库
