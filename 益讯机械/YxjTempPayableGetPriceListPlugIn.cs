@@ -114,7 +114,7 @@ namespace kingdee.CustLI.Business.PlugIn
                 foreach (DynamicObject entry in entryObjs)
                 {
                     // 赠品不取价
-                    if (entry["FGIVEAWAY"] != null && Convert.ToBoolean(entry["FGIVEAWAY"]))
+                    if (entry["IsFree"] != null && Convert.ToBoolean(entry["IsFree"]))
                     {
                         continue;
                     }
@@ -126,7 +126,7 @@ namespace kingdee.CustLI.Business.PlugIn
                     }
 
                     string sourceType = (entry["FSOURCETYPE"] == null) ? string.Empty : entry["FSOURCETYPE"].ToString();
-                    string sourceBillNo = (entry["FSourceBillNo"] == null) ? string.Empty : entry["FSourceBillNo"].ToString();
+                    string sourceBillNo = (entry["SourceBillNo"] == null) ? string.Empty : entry["SourceBillNo"].ToString();
 
                     if (!string.IsNullOrEmpty(sourceBillNo) && !sourceBillNos.Contains(sourceBillNo))
                     {
@@ -188,7 +188,7 @@ namespace kingdee.CustLI.Business.PlugIn
 
                 if (priceMap.TryGetValue(PriceListQueryHelper.BuildKey(req), out decimal? price) && price.HasValue)
                 {
-                    r.Entry["FTAXPRICE"] = price.Value;
+                    r.Entry["TaxPrice"] = price.Value;
                     changedBills.Add(r.Bill);
                     filledCount++;
                 }

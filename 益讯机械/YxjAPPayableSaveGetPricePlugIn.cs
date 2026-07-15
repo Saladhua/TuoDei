@@ -50,8 +50,8 @@ namespace kingdee.CustLI.Business.PlugIn
             e.FieldKeys.Add("AP_PAYABLEENTRY");           // 单据体
             e.FieldKeys.Add("AP_PAYABLEENTRY.FMATERIALID");
             e.FieldKeys.Add("AP_PAYABLEENTRY.FSOURCETYPE");
-            e.FieldKeys.Add("AP_PAYABLEENTRY.FSourceBillNo");
-            e.FieldKeys.Add("AP_PAYABLEENTRY.FGIVEAWAY");
+            e.FieldKeys.Add("AP_PAYABLEENTRY.SourceBillNo");
+            e.FieldKeys.Add("AP_PAYABLEENTRY.IsFree");
             e.FieldKeys.Add("F_CustLi_PriceListTaxPrice"); // 新字段：价目表含税单价
         }
 
@@ -87,7 +87,7 @@ namespace kingdee.CustLI.Business.PlugIn
                 foreach (DynamicObject entry in entryObjs)
                 {
                     // 赠品不取价
-                    if (entry["FGIVEAWAY"] != null && Convert.ToBoolean(entry["FGIVEAWAY"]))
+                    if (entry["IsFree"] != null && Convert.ToBoolean(entry["IsFree"]))
                     {
                         continue;
                     }
@@ -99,7 +99,7 @@ namespace kingdee.CustLI.Business.PlugIn
                     }
 
                     string sourceType = (entry["FSOURCETYPE"] == null) ? string.Empty : entry["FSOURCETYPE"].ToString();
-                    string sourceBillNo = (entry["FSourceBillNo"] == null) ? string.Empty : entry["FSourceBillNo"].ToString();
+                    string sourceBillNo = (entry["SourceBillNo"] == null) ? string.Empty : entry["SourceBillNo"].ToString();
 
                     if (!string.IsNullOrEmpty(sourceBillNo) && !sourceBillNos.Contains(sourceBillNo))
                     {

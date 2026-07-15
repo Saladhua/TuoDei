@@ -37,7 +37,7 @@ namespace kingdee.CustLI.Business.PlugIn
 
             e.FieldKeys.Add("FSETACCOUNTTYPE");            // 立账类型：区分暂估/财务
             e.FieldKeys.Add("AP_PAYABLEENTRY");           // 单据体
-            e.FieldKeys.Add("AP_PAYABLEENTRY.FTAXPRICE"); // 发票含税单价
+            e.FieldKeys.Add("AP_PAYABLEENTRY.TaxPrice"); // 发票含税单价
             e.FieldKeys.Add("F_CustLi_PriceListTaxPrice"); // 价目表含税单价
         }
 
@@ -71,7 +71,7 @@ namespace kingdee.CustLI.Business.PlugIn
 
                 foreach (DynamicObject entry in entryObjs)
                 {
-                    decimal invoicePrice = (entry["FTAXPRICE"] == null) ? 0m : Convert.ToDecimal(entry["FTAXPRICE"]);
+                    decimal invoicePrice = (entry["TaxPrice"] == null) ? 0m : Convert.ToDecimal(entry["TaxPrice"]);
                     decimal listPrice = (entry["F_CustLi_PriceListTaxPrice"] == null)
                         ? 0m
                         : Convert.ToDecimal(entry["F_CustLi_PriceListTaxPrice"]);
