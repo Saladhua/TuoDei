@@ -85,6 +85,7 @@ namespace kingdee.CustLI.Business.PlugIn
             var refs = new List<EntryRef>();
             var sourceBillNos = new List<string>();
             var changedBills = new HashSet<DynamicObject>();
+            int skippedCount = 0;
 
             foreach (DynamicObject bill in bills)
             {
@@ -129,6 +130,7 @@ namespace kingdee.CustLI.Business.PlugIn
                     decimal currentTaxPrice = (entry["TaxPrice"] == null) ? 0m : Convert.ToDecimal(entry["TaxPrice"]);
                     if (currentTaxPrice > 0m)
                     {
+                        skippedCount++;
                         continue;
                     }
 
@@ -155,7 +157,14 @@ namespace kingdee.CustLI.Business.PlugIn
 
             if (refs.Count == 0)
             {
-                this.View.ShowMessage("所选单据中没有符合取价条件的行（需为暂估、且处于暂存/创建/重新审核状态、含有效物料）。");
+                if (skippedCount > 0)
+                {
+                    this.View.ShowMessage(string.Format("所选单据中所有非赠品行已有含税单价，无需取价（已跳过 {0} 行）。", skippedCount));
+                }
+                else
+                {
+                    this.View.ShowMessage("所选单据中没有符合取价条件的行（需为暂估、且处于暂存/创建/重新审核状态、含有效物料）。");
+                }
                 return;
             }
 
@@ -203,7 +212,14 @@ namespace kingdee.CustLI.Business.PlugIn
 
             if (changedBills.Count == 0)
             {
-                this.View.ShowMessage("未在采购价目表中匹配到对应价格，未更新任何单据。");
+                if (skippedCount > 0)
+                {
+                    this.View.ShowMessage(string.Format("未在采购价目表中匹配到对应价格，已跳过 {0} 行（已有含税单价）。", skippedCount));
+                }
+                else
+                {
+                    this.View.ShowMessage("未在采购价目表中匹配到对应价格，未更新任何单据。");
+                }
                 return;
             }
 
@@ -212,7 +228,14 @@ namespace kingdee.CustLI.Business.PlugIn
 
             // 8. 刷新列表并提示结果
             this.View.Refresh();
-            this.View.ShowMessage(string.Format("已成功为 {0} 行获取价目表价格并保存。", filledCount));
+            if (skippedCount > 0)
+            {
+                this.View.ShowMessage(string.Format("已跳过 {0} 行（已有含税单价），已成功为 {1} 行获取价目表价格并保存。", skippedCount, filledCount));
+            }
+            else
+            {
+                this.View.ShowMessage(string.Format("已成功为 {0} 行获取价目表价格并保存。", filledCount));
+            }
         }
     }
 }
