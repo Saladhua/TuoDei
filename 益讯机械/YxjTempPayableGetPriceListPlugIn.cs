@@ -77,21 +77,20 @@ namespace kingdee.CustLI.Business.PlugIn
             var selectors = new List<SelectorItemInfo>
             {
                 new SelectorItemInfo("FSETACCOUNTTYPE"),
-                new SelectorItemInfo("DOCUMENTSTATUS"),
+
                 new SelectorItemInfo("SupplierId_ID"),
                 new SelectorItemInfo("ISTAX"),
                 new SelectorItemInfo("FALLAMOUNTFOR"),
-                new SelectorItemInfo("AP_PAYABLEENTRY"),
-                new SelectorItemInfo("AP_PAYABLEENTRY.FMATERIALID"),
-                new SelectorItemInfo("AP_PAYABLEENTRY.FPrice"),
-                new SelectorItemInfo("AP_PAYABLEENTRY.TaxPrice"),
-                new SelectorItemInfo("AP_PAYABLEENTRY.FNoTaxAmountFor_D"),
-                new SelectorItemInfo("AP_PAYABLEENTRY.FTAXAMOUNTFOR_D"),
-                new SelectorItemInfo("AP_PAYABLEENTRY.FALLAMOUNTFOR_D"),
-                new SelectorItemInfo("AP_PAYABLEENTRY.FSOURCETYPE"),
-                new SelectorItemInfo("AP_PAYABLEENTRY.SourceBillNo"),
-                new SelectorItemInfo("AP_PAYABLEENTRY.PriceQty"),
-                new SelectorItemInfo("AP_PAYABLEENTRY.IsFree"),
+                new SelectorItemInfo("FMATERIALID"),
+                new SelectorItemInfo("FPrice"),
+                new SelectorItemInfo("TaxPrice"),
+                new SelectorItemInfo("FNoTaxAmountFor_D"),
+                new SelectorItemInfo("FTAXAMOUNTFOR_D"),
+                new SelectorItemInfo("FALLAMOUNTFOR_D"),
+                new SelectorItemInfo("FSOURCETYPE"),
+                new SelectorItemInfo("SourceBillNo"),
+                new SelectorItemInfo("PriceQty"),
+                new SelectorItemInfo("IsFree"),
             };
             DynamicObject[] bills = BusinessDataServiceHelper.Load(this.Context, info, selectors, null);
             if (bills == null || bills.Length == 0)
