@@ -125,6 +125,13 @@ namespace kingdee.CustLI.Business.PlugIn
                         continue;
                     }
 
+                    // 已有含税单价的不重新取价
+                    decimal currentTaxPrice = (entry["TaxPrice"] == null) ? 0m : Convert.ToDecimal(entry["TaxPrice"]);
+                    if (currentTaxPrice > 0m)
+                    {
+                        continue;
+                    }
+
                     string sourceType = (entry["FSOURCETYPE"] == null) ? string.Empty : entry["FSOURCETYPE"].ToString();
                     string sourceBillNo = (entry["SourceBillNo"] == null) ? string.Empty : entry["SourceBillNo"].ToString();
 
