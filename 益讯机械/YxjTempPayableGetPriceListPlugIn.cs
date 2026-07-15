@@ -74,7 +74,26 @@ namespace kingdee.CustLI.Business.PlugIn
 
             // 2. 加载单据（AP_Payable 与财务应付单同表单，需按立账类型过滤出暂估）
             BusinessInfo info = this.View.BillBusinessInfo;
-            DynamicObject[] bills = BusinessDataServiceHelper.Load(this.Context, ids.Cast<object>().ToArray(), info.GetDynamicObjectType());
+            var selectors = new List<SelectorItemInfo>
+            {
+                new SelectorItemInfo("FSETACCOUNTTYPE"),
+                new SelectorItemInfo("DOCUMENTSTATUS"),
+                new SelectorItemInfo("SupplierId_ID"),
+                new SelectorItemInfo("ISTAX"),
+                new SelectorItemInfo("FALLAMOUNTFOR"),
+                new SelectorItemInfo("AP_PAYABLEENTRY"),
+                new SelectorItemInfo("AP_PAYABLEENTRY.FMATERIALID"),
+                new SelectorItemInfo("AP_PAYABLEENTRY.FPrice"),
+                new SelectorItemInfo("AP_PAYABLEENTRY.TaxPrice"),
+                new SelectorItemInfo("AP_PAYABLEENTRY.FNoTaxAmountFor_D"),
+                new SelectorItemInfo("AP_PAYABLEENTRY.FTAXAMOUNTFOR_D"),
+                new SelectorItemInfo("AP_PAYABLEENTRY.FALLAMOUNTFOR_D"),
+                new SelectorItemInfo("AP_PAYABLEENTRY.FSOURCETYPE"),
+                new SelectorItemInfo("AP_PAYABLEENTRY.SourceBillNo"),
+                new SelectorItemInfo("AP_PAYABLEENTRY.PriceQty"),
+                new SelectorItemInfo("AP_PAYABLEENTRY.IsFree"),
+            };
+            DynamicObject[] bills = BusinessDataServiceHelper.Load(this.Context, info, selectors, null);
             if (bills == null || bills.Length == 0)
             {
                 this.View.ShowMessage("加载单据失败，请确认单据状态。");
@@ -190,8 +209,9 @@ namespace kingdee.CustLI.Business.PlugIn
 
             Dictionary<string, decimal?> priceMap = PriceListQueryHelper.GetLatestTaxPrice(this.Context, reqs);
 
-            // 6. 写回含税单价(TaxPrice)，记录发生变更的单据
+            // 6. 写回含税单价(TaxPrice)及相关金额字段，记录发生变更的单据
             int filledCount = 0;
+            const decimal taxRate = 0.13m;
 
             foreach (var r in refs)
             {
@@ -205,10 +225,37 @@ namespace kingdee.CustLI.Business.PlugIn
 
                 if (priceMap.TryGetValue(PriceListQueryHelper.BuildKey(req), out decimal? price) && price.HasValue)
                 {
-                    r.Entry["TaxPrice"] = price.Value;
+                    decimal taxPrice = price.Value;
+                    decimal unitPrice = Math.Round(taxPrice / (1m + taxRate), 6);
+                    decimal qty = (r.Entry["PriceQty"] == null) ? 0m : Convert.ToDecimal(r.Entry["PriceQty"]);
+                    decimal allAmount = Math.Round(qty * taxPrice, 2);
+                    decimal noTaxAmount = Math.Round(qty * unitPrice, 2);
+
+                    r.Entry["TaxPrice"] = taxPrice;
+                    r.Entry["FPrice"] = unitPrice;
+                    r.Entry["FALLAMOUNTFOR_D"] = allAmount;
+                    r.Entry["FNoTaxAmountFor_D"] = noTaxAmount;
+                    r.Entry["FTAXAMOUNTFOR_D"] = Math.Round(allAmount - noTaxAmount, 2);
+
                     changedBills.Add(r.Bill);
                     filledCount++;
                 }
+            }
+
+            // 6b. 更新表头价税合计：汇总所有行的 FALLAMOUNTFOR_D
+            foreach (DynamicObject bill in changedBills)
+            {
+                var entries = bill["AP_PAYABLEENTRY"] as DynamicObjectCollection;
+                if (entries == null) continue;
+
+                decimal headerTotal = 0m;
+                foreach (DynamicObject entry in entries)
+                {
+                    headerTotal += (entry["FALLAMOUNTFOR_D"] == null)
+                        ? 0m
+                        : Convert.ToDecimal(entry["FALLAMOUNTFOR_D"]);
+                }
+                bill["FALLAMOUNTFOR"] = Math.Round(headerTotal, 2);
             }
 
             if (changedBills.Count == 0)
