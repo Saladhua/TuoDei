@@ -69,16 +69,16 @@ namespace kingdee.CustLI.Business.PlugIn
             string sql = string.Format(@"
                 SELECT a.FMATERIALID     AS FMATERIALID,
                        b.FSUPPLIERID     AS FSUPPLIERID,
-                       a.FPriceType      AS FPRICETYPE,
-                       a.FIsIncludedTax  AS FISINCLUDEDTAX,
+                       b.FPriceType      AS FPRICETYPE,
+                       b.FIsIncludedTax  AS FISINCLUDEDTAX,
                        a.FTAXPRICE       AS FTAXPRICE,
                        a.FEFFECTIVEDATE  AS FEFFECTIVEDATE
                 FROM t_PUR_PriceListEntry a
                 INNER JOIN t_PUR_PriceList b ON a.FID = b.FID
                 WHERE a.FMATERIALID   IN ({0})
                   AND b.FSUPPLIERID   IN ({1})
-                  AND a.FPriceType    IN ({2})
-                  AND a.FIsIncludedTax IN ({3})
+                  AND b.FPriceType    IN ({2})
+                  AND b.FIsIncludedTax IN ({3})
                   AND a.FDISABLESTATUS <> 'A'
                 ORDER BY a.FEFFECTIVEDATE DESC
                 ",
