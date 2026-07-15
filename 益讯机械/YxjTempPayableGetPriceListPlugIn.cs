@@ -92,6 +92,10 @@ namespace kingdee.CustLI.Business.PlugIn
 
             foreach (DynamicObject bill in bills)
             {
+                // 仅处理用户勾选的行
+                long billId = Convert.ToInt64(bill["Id"]);
+                if (!ids.Contains(billId)) continue;
+
                 // 仅处理暂估立账类型
                 string acctType = (bill["FSETACCOUNTTYPE"] == null) ? string.Empty : bill["FSETACCOUNTTYPE"].ToString();
                 if (acctType != AcctTypeTemp)
