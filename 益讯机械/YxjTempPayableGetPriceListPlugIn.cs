@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.ComponentModel;
 using System.Linq;
 using Kingdee.BOS;
+using Kingdee.BOS.Core.DynamicForm;
 using Kingdee.BOS.Core.DynamicForm.PlugIn;
 using Kingdee.BOS.Core.DynamicForm.PlugIn.Args;
 using Kingdee.BOS.Core.List.PlugIn;
@@ -10,6 +11,8 @@ using Kingdee.BOS.Orm.DataEntity;
 using Kingdee.BOS.ServiceHelper;
 using Kingdee.BOS.Core.Metadata;
 using Kingdee.BOS.Util;
+using System.Text;
+using System.Globalization;
 
 namespace kingdee.CustLI.Business.PlugIn
 {
@@ -74,25 +77,7 @@ namespace kingdee.CustLI.Business.PlugIn
 
             // 2. 加载单据（AP_Payable 与财务应付单同表单，需按立账类型过滤出暂估）
             BusinessInfo info = this.View.BillBusinessInfo;
-            var selectors = new List<SelectorItemInfo>
-            {
-                new SelectorItemInfo("FSETACCOUNTTYPE"),
-
-                new SelectorItemInfo("SupplierId_ID"),
-                new SelectorItemInfo("ISTAX"),
-                new SelectorItemInfo("FALLAMOUNTFOR"),
-                new SelectorItemInfo("FMATERIALID"),
-                new SelectorItemInfo("FPrice"),
-                new SelectorItemInfo("TaxPrice"),
-                new SelectorItemInfo("FNoTaxAmountFor_D"),
-                new SelectorItemInfo("FTAXAMOUNTFOR_D"),
-                new SelectorItemInfo("FALLAMOUNTFOR_D"),
-                new SelectorItemInfo("FSOURCETYPE"),
-                new SelectorItemInfo("SourceBillNo"),
-                new SelectorItemInfo("PriceQty"),
-                new SelectorItemInfo("IsFree"),
-            };
-            DynamicObject[] bills = BusinessDataServiceHelper.Load(this.Context, info, selectors, null);
+            DynamicObject[] bills = BusinessDataServiceHelper.Load(this.Context, info, null, null);
             if (bills == null || bills.Length == 0)
             {
                 this.View.ShowMessage("加载单据失败，请确认单据状态。");
@@ -132,7 +117,7 @@ namespace kingdee.CustLI.Business.PlugIn
 
                 foreach (DynamicObject entry in entryObjs)
                 {
-                    // 赠品不取价
+
                     if (entry["IsFree"] != null && Convert.ToBoolean(entry["IsFree"]))
                     {
                         continue;
@@ -144,7 +129,6 @@ namespace kingdee.CustLI.Business.PlugIn
                         continue;
                     }
 
-                    // 已有含税单价的不重新取价
                     decimal currentTaxPrice = (entry["TaxPrice"] == null) ? 0m : Convert.ToDecimal(entry["TaxPrice"]);
                     if (currentTaxPrice > 0m)
                     {
@@ -208,9 +192,11 @@ namespace kingdee.CustLI.Business.PlugIn
 
             Dictionary<string, decimal?> priceMap = PriceListQueryHelper.GetLatestTaxPrice(this.Context, reqs);
 
-            // 6. 写回含税单价(TaxPrice)及相关金额字段，记录发生变更的单据
+            // 6. 手动计算所有金额字段 + 收集 FEntryId（用于 SQL 批量 UPDATE 兜底）
             int filledCount = 0;
             const decimal taxRate = 0.13m;
+            var entryUpdates = new Dictionary<long, (string price, string allAmt, string noTaxAmt, string taxAmt)>();
+            var headerTotals = new Dictionary<long, string>();
 
             foreach (var r in refs)
             {
@@ -227,34 +213,26 @@ namespace kingdee.CustLI.Business.PlugIn
                     decimal taxPrice = price.Value;
                     decimal unitPrice = Math.Round(taxPrice / (1m + taxRate), 6);
                     decimal qty = (r.Entry["PriceQty"] == null) ? 0m : Convert.ToDecimal(r.Entry["PriceQty"]);
-                    decimal allAmount = Math.Round(qty * taxPrice, 2);
-                    decimal noTaxAmount = Math.Round(qty * unitPrice, 2);
+                    decimal allAmt = Math.Round(qty * taxPrice, 2);
+                    decimal noTaxAmt = Math.Round(qty * unitPrice, 2);
+                    decimal taxAmt = Math.Round(allAmt - noTaxAmt, 2);
 
                     r.Entry["TaxPrice"] = taxPrice;
                     r.Entry["FPrice"] = unitPrice;
-                    r.Entry["FALLAMOUNTFOR_D"] = allAmount;
-                    r.Entry["FNoTaxAmountFor_D"] = noTaxAmount;
-                    r.Entry["FTAXAMOUNTFOR_D"] = Math.Round(allAmount - noTaxAmount, 2);
+                    r.Entry["FALLAMOUNTFOR_D"] = allAmt;
+                    r.Entry["FNoTaxAmountFor_D"] = noTaxAmt;
+                    r.Entry["FTAXAMOUNTFOR_D"] = taxAmt;
+
+                    long entryId = Convert.ToInt64(r.Entry["Id"]);
+                    entryUpdates[entryId] = (
+                        unitPrice.ToString("F6", CultureInfo.InvariantCulture),
+                        allAmt.ToString("F2", CultureInfo.InvariantCulture),
+                        noTaxAmt.ToString("F2", CultureInfo.InvariantCulture),
+                        taxAmt.ToString("F2", CultureInfo.InvariantCulture));
 
                     changedBills.Add(r.Bill);
                     filledCount++;
                 }
-            }
-
-            // 6b. 更新表头价税合计：汇总所有行的 FALLAMOUNTFOR_D
-            foreach (DynamicObject bill in changedBills)
-            {
-                var entries = bill["AP_PAYABLEENTRY"] as DynamicObjectCollection;
-                if (entries == null) continue;
-
-                decimal headerTotal = 0m;
-                foreach (DynamicObject entry in entries)
-                {
-                    headerTotal += (entry["FALLAMOUNTFOR_D"] == null)
-                        ? 0m
-                        : Convert.ToDecimal(entry["FALLAMOUNTFOR_D"]);
-                }
-                bill["FALLAMOUNTFOR"] = Math.Round(headerTotal, 2);
             }
 
             if (changedBills.Count == 0)
@@ -270,10 +248,67 @@ namespace kingdee.CustLI.Business.PlugIn
                 return;
             }
 
-            // 7. 走标准保存：触发值更新（刷新 税额 / 价税合计 等）并落库
+            // 6b. 汇总表头价税合计
+            foreach (DynamicObject bill in changedBills)
+            {
+                long billId = Convert.ToInt64(bill["Id"]);
+                var entries = bill["AP_PAYABLEENTRY"] as DynamicObjectCollection;
+                decimal total = 0m;
+                if (entries != null)
+                {
+                    foreach (DynamicObject entry in entries)
+                    {
+                        total += (entry["FALLAMOUNTFOR_D"] == null)
+                            ? 0m
+                            : Convert.ToDecimal(entry["FALLAMOUNTFOR_D"]);
+                    }
+                }
+                total = Math.Round(total, 2);
+                bill["FALLAMOUNTFOR"] = total;
+                headerTotals[billId] = total.ToString("F2", CultureInfo.InvariantCulture);
+            }
+
+            // 7. 走标准保存（让平台更新 TaxPrice + 版本/时间戳）
             BusinessDataServiceHelper.Save(this.Context, info, changedBills.ToArray());
 
-            // 8. 刷新列表并提示结果
+            // 8. 批量 SQL UPDATE 兜底金额字段（计算字段 ORM 不写，必须 SQL 补）
+            if (entryUpdates.Count > 0)
+            {
+                var sb = new StringBuilder();
+                string entryIdList = string.Join(",", entryUpdates.Keys);
+                string billIdList = string.Join(",", headerTotals.Keys);
+
+                sb.Append("UPDATE T_AP_PAYABLEENTRY SET ");
+                sb.Append("FPrice = CASE FENTRYID ");
+                foreach (var kv in entryUpdates)
+                    sb.AppendFormat("WHEN {0} THEN {1} ", kv.Key, kv.Value.price);
+                sb.Append("END, ");
+                sb.Append("FALLAMOUNTFOR = CASE FENTRYID ");
+                foreach (var kv in entryUpdates)
+                    sb.AppendFormat("WHEN {0} THEN {1} ", kv.Key, kv.Value.allAmt);
+                sb.Append("END, ");
+                sb.Append("FNoTaxAmountFor = CASE FENTRYID ");
+                foreach (var kv in entryUpdates)
+                    sb.AppendFormat("WHEN {0} THEN {1} ", kv.Key, kv.Value.noTaxAmt);
+                sb.Append("END, ");
+                sb.Append("FTAXAMOUNTFOR = CASE FENTRYID ");
+                foreach (var kv in entryUpdates)
+                    sb.AppendFormat("WHEN {0} THEN {1} ", kv.Key, kv.Value.taxAmt);
+                sb.Append("END ");
+                sb.AppendFormat("WHERE FENTRYID IN ({0}) AND FID IN ({1})", entryIdList, billIdList);
+                DBServiceHelper.ExecuteDataSet(this.Context, sb.ToString());
+
+                var sbHead = new StringBuilder();
+                sbHead.Append("UPDATE T_AP_PAYABLE SET ");
+                sbHead.Append("FALLAMOUNTFOR = CASE FID ");
+                foreach (var kv in headerTotals)
+                    sbHead.AppendFormat("WHEN {0} THEN {1} ", kv.Key, kv.Value);
+                sbHead.Append("END ");
+                sbHead.AppendFormat("WHERE FID IN ({0})", billIdList);
+                DBServiceHelper.ExecuteDataSet(this.Context, sbHead.ToString());
+            }
+
+            // 9. 刷新列表并提示结果
             this.View.Refresh();
             if (skippedCount > 0)
             {
