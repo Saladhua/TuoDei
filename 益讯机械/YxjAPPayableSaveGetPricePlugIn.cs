@@ -45,13 +45,13 @@ namespace kingdee.CustLI.Business.PlugIn
             base.OnPreparePropertys(e);
 
             e.FieldKeys.Add("FSETACCOUNTTYPE");            // 立账类型：区分暂估/财务
-            e.FieldKeys.Add("FISTAX");                     // 是否以含税价录入
+            e.FieldKeys.Add("ISTAX");                     // 是否以含税价录入
             e.FieldKeys.Add("FSUPPLIERID");                // 供应商（表头）
-            e.FieldKeys.Add("FAPPAYABLEENTRY");           // 单据体
-            e.FieldKeys.Add("FAPPAYABLEENTRY.FMATERIALID");
-            e.FieldKeys.Add("FAPPAYABLEENTRY.FSOURCETYPE");
-            e.FieldKeys.Add("FAPPAYABLEENTRY.FSourceBillNo");
-            e.FieldKeys.Add("FAPPAYABLEENTRY.FGIVEAWAY");
+            e.FieldKeys.Add("AP_PAYABLEENTRY");           // 单据体
+            e.FieldKeys.Add("AP_PAYABLEENTRY.FMATERIALID");
+            e.FieldKeys.Add("AP_PAYABLEENTRY.FSOURCETYPE");
+            e.FieldKeys.Add("AP_PAYABLEENTRY.FSourceBillNo");
+            e.FieldKeys.Add("AP_PAYABLEENTRY.FGIVEAWAY");
             e.FieldKeys.Add("F_CustLi_PriceListTaxPrice"); // 新字段：价目表含税单价
         }
 
@@ -72,9 +72,9 @@ namespace kingdee.CustLI.Business.PlugIn
                 }
 
                 long supplierId = (bill["SupplierId_ID"] == null) ? 0L : Convert.ToInt64(bill["SupplierId_ID"]);
-                bool includedTax = (bill["FISTAX"] != null) && Convert.ToBoolean(bill["FISTAX"]);
+                bool includedTax = (bill["ISTAX"] != null) && Convert.ToBoolean(bill["ISTAX"]);
 
-                var entryObjs = bill["FAPPAYABLEENTRY"] as DynamicObjectCollection;
+                var entryObjs = bill["AP_PAYABLEENTRY"] as DynamicObjectCollection;
                 if (entryObjs == null)
                 {
                     continue;

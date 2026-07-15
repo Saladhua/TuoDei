@@ -179,9 +179,9 @@
   <ItemGroup>
     <Compile Include="Properties\AssemblyInfo.cs" />
     <Compile Include="益讯机械\公有方法\PriceListQueryHelper.cs" />
-    <Compile Include="益讯机械\暂估应付单取价列表插件.cs" />
-    <Compile Include="益讯机械\财务应付单取价保存插件.cs" />
-    <Compile Include="益讯机械\财务应付单提交校验插件.cs" />
+    <Compile Include="益讯机械\YxjTempPayableGetPriceListPlugIn.cs" />
+    <Compile Include="益讯机械\YxjAPPayableSaveGetPricePlugIn.cs" />
+    <Compile Include="益讯机械\YxjAPPayableSubmitValidatePlugIn.cs" />
   </ItemGroup>
   <ItemGroup />
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />

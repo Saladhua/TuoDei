@@ -36,8 +36,8 @@ namespace kingdee.CustLI.Business.PlugIn
             base.OnPreparePropertys(e);
 
             e.FieldKeys.Add("FSETACCOUNTTYPE");            // 立账类型：区分暂估/财务
-            e.FieldKeys.Add("FAPPAYABLEENTRY");           // 单据体
-            e.FieldKeys.Add("FAPPAYABLEENTRY.FTAXPRICE"); // 发票含税单价
+            e.FieldKeys.Add("AP_PAYABLEENTRY");           // 单据体
+            e.FieldKeys.Add("AP_PAYABLEENTRY.FTAXPRICE"); // 发票含税单价
             e.FieldKeys.Add("F_CustLi_PriceListTaxPrice"); // 价目表含税单价
         }
 
@@ -58,7 +58,7 @@ namespace kingdee.CustLI.Business.PlugIn
                     continue;
                 }
 
-                var entryObjs = bill["FAPPAYABLEENTRY"] as DynamicObjectCollection;
+                var entryObjs = bill["AP_PAYABLEENTRY"] as DynamicObjectCollection;
                 if (entryObjs == null)
                 {
                     continue;

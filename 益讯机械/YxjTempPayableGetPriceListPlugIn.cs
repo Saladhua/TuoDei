@@ -96,16 +96,16 @@ namespace kingdee.CustLI.Business.PlugIn
                 }
 
                 // 状态限制：仅 暂存 / 创建 / 重新审核
-                string docStatus = (bill["FDOCUMENTSTATUS"] == null) ? string.Empty : bill["FDOCUMENTSTATUS"].ToString();
+                string docStatus = (bill["DOCUMENTSTATUS"] == null) ? string.Empty : bill["DOCUMENTSTATUS"].ToString();
                 if (!AllowDocStatus.Contains(docStatus))
                 {
                     continue;
                 }
 
                 long supplierId = (bill["SupplierId_ID"] == null) ? 0L : Convert.ToInt64(bill["SupplierId_ID"]);
-                bool includedTax = (bill["FISTAX"] != null) && Convert.ToBoolean(bill["FISTAX"]);
+                bool includedTax = (bill["ISTAX"] != null) && Convert.ToBoolean(bill["ISTAX"]);
 
-                var entryObjs = bill["FAPPAYABLEENTRY"] as DynamicObjectCollection;
+                var entryObjs = bill["AP_PAYABLEENTRY"] as DynamicObjectCollection;
                 if (entryObjs == null)
                 {
                     continue;
