@@ -313,6 +313,19 @@ namespace kingdee.CustLI.Business.PlugIn
                 sbHead.Append("END ");
                 sbHead.AppendFormat("WHERE FID IN ({0})", billIdList);
                 DBServiceHelper.ExecuteDataSet(this.Context, sbHead.ToString());
+
+                var sbPlan = new StringBuilder();
+                sbPlan.Append("UPDATE T_AP_PAYABLEPLAN SET ");
+                sbPlan.Append("FPAYAMOUNTFOR = CASE FID ");
+                foreach (var kv in headerTotals)
+                    sbPlan.AppendFormat("WHEN {0} THEN {1} ", kv.Key, kv.Value);
+                sbPlan.Append("END, ");
+                sbPlan.Append("FPAYAMOUNT = CASE FID ");
+                foreach (var kv in headerTotals)
+                    sbPlan.AppendFormat("WHEN {0} THEN {1} ", kv.Key, kv.Value);
+                sbPlan.Append("END ");
+                sbPlan.AppendFormat("WHERE FID IN ({0})", billIdList);
+                DBServiceHelper.ExecuteDataSet(this.Context, sbPlan.ToString());
             }
 
             // 9. 刷新列表并提示结果
