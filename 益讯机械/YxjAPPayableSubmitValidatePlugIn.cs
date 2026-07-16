@@ -37,7 +37,7 @@ namespace kingdee.CustLI.Business.PlugIn
 
             e.FieldKeys.Add("FSETACCOUNTTYPE");            // 立账类型：区分暂估/财务
             e.FieldKeys.Add("AP_PAYABLEENTRY");           // 单据体
-            e.FieldKeys.Add("TaxPrice"); // 发票含税单价
+            e.FieldKeys.Add("FTAXPRICE"); // 发票含税单价
             e.FieldKeys.Add("F_CustLi_PriceListTaxPrice"); // 价目表含税单价
         }
 
