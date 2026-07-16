@@ -302,30 +302,27 @@ namespace kingdee.CustLI.Business.PlugIn
                 foreach (var kv in entryUpdates)
                     sb.AppendFormat("WHEN {0} THEN {1} ", kv.Key, kv.Value.taxAmt);
                 sb.Append("END ");
-                sb.AppendFormat("WHERE FENTRYID IN ({0}) AND FID IN ({1})", entryIdList, billIdList);
+                sb.AppendFormat("WHERE FENTRYID IN ({0}) AND FID IN ({1});", entryIdList, billIdList);
+
+                sb.Append("UPDATE T_AP_PAYABLE SET ");
+                sb.Append("FALLAMOUNTFOR = CASE FID ");
+                foreach (var kv in headerTotals)
+                    sb.AppendFormat("WHEN {0} THEN {1} ", kv.Key, kv.Value);
+                sb.Append("END ");
+                sb.AppendFormat("WHERE FID IN ({0});", billIdList);
+
+                sb.Append("UPDATE T_AP_PAYABLEPLAN SET ");
+                sb.Append("FPAYAMOUNTFOR = CASE FID ");
+                foreach (var kv in headerTotals)
+                    sb.AppendFormat("WHEN {0} THEN {1} ", kv.Key, kv.Value);
+                sb.Append("END, ");
+                sb.Append("FPAYAMOUNT = CASE FID ");
+                foreach (var kv in headerTotals)
+                    sb.AppendFormat("WHEN {0} THEN {1} ", kv.Key, kv.Value);
+                sb.Append("END ");
+                sb.AppendFormat("WHERE FID IN ({0});", billIdList);
+
                 DBServiceHelper.ExecuteDataSet(this.Context, sb.ToString());
-
-                var sbHead = new StringBuilder();
-                sbHead.Append("UPDATE T_AP_PAYABLE SET ");
-                sbHead.Append("FALLAMOUNTFOR = CASE FID ");
-                foreach (var kv in headerTotals)
-                    sbHead.AppendFormat("WHEN {0} THEN {1} ", kv.Key, kv.Value);
-                sbHead.Append("END ");
-                sbHead.AppendFormat("WHERE FID IN ({0})", billIdList);
-                DBServiceHelper.ExecuteDataSet(this.Context, sbHead.ToString());
-
-                var sbPlan = new StringBuilder();
-                sbPlan.Append("UPDATE T_AP_PAYABLEPLAN SET ");
-                sbPlan.Append("FPAYAMOUNTFOR = CASE FID ");
-                foreach (var kv in headerTotals)
-                    sbPlan.AppendFormat("WHEN {0} THEN {1} ", kv.Key, kv.Value);
-                sbPlan.Append("END, ");
-                sbPlan.Append("FPAYAMOUNT = CASE FID ");
-                foreach (var kv in headerTotals)
-                    sbPlan.AppendFormat("WHEN {0} THEN {1} ", kv.Key, kv.Value);
-                sbPlan.Append("END ");
-                sbPlan.AppendFormat("WHERE FID IN ({0})", billIdList);
-                DBServiceHelper.ExecuteDataSet(this.Context, sbPlan.ToString());
             }
 
             // 9. 刷新列表并提示结果
