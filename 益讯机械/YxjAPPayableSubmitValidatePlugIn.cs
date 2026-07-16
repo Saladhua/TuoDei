@@ -37,17 +37,18 @@ namespace kingdee.CustLI.Business.PlugIn
 
             e.FieldKeys.Add("FSETACCOUNTTYPE");            // 立账类型：区分暂估/财务
             e.FieldKeys.Add("AP_PAYABLEENTRY");           // 单据体
-            e.FieldKeys.Add("AP_PAYABLEENTRY.TaxPrice"); // 发票含税单价
+            e.FieldKeys.Add("TaxPrice"); // 发票含税单价
             e.FieldKeys.Add("F_CustLi_PriceListTaxPrice"); // 价目表含税单价
         }
 
+
         /// <summary>
-        /// 操作执行完成后（事务已提交）：添加非阻断的"不一致提醒"
-        /// 说明：仅作提醒不阻断提交，故在 AfterExecuteOperationTransaction 中追加 OperateResult。
+        /// 操作执行前（事务内、实际执行前）：添加非阻断的"不一致提醒"
+        /// 说明：此时数据实体完整加载，避免 AfterExecute 中字段可能未加载的问题。
         /// </summary>
-        public override void AfterExecuteOperationTransaction(AfterExecuteOperationTransaction e)
+        public override void BeginOperationTransaction(BeginOperationTransactionArgs e)
         {
-            base.AfterExecuteOperationTransaction(e);
+            base.BeginOperationTransaction(e);
 
             foreach (DynamicObject bill in e.DataEntitys)
             {
