@@ -134,11 +134,9 @@ namespace kingdee.CustLI.Business.PlugIn
                     }
                 }
 
-                Dictionary<string, string[]> tempSrcMap = null;
                 if (apBillNos.Count > 0)
                 {
-                    tempSrcMap = PriceListQueryHelper.GetTempPayableSourceMap(this.Context, apBillNos);
-                    sourceBillNos.Clear();
+                    Dictionary<string, string[]> tempSrcMap = PriceListQueryHelper.GetTempPayableSourceMap(this.Context, apBillNos);
                     foreach (var r in refs)
                     {
                         if (r.SourceType == "AP_Payable" && !string.IsNullOrEmpty(r.SourceBillNo))
@@ -150,49 +148,84 @@ namespace kingdee.CustLI.Business.PlugIn
                                 r.SourceBillNo = originalSrc[1];
                             }
                         }
-                        if (!string.IsNullOrEmpty(r.SourceBillNo) && !sourceBillNos.Contains(r.SourceBillNo))
+                    }
+                }
+
+                // 分出已追溯行(可推导价格类型) 和 未追溯行(兜底取价)
+                var resolvedRefs = new List<SaveEntryRef>();
+                var unresolvedRefs = new List<SaveEntryRef>();
+                foreach (var r in refs)
+                {
+                    if (r.SourceType == "AP_Payable")
+                        unresolvedRefs.Add(r);
+                    else
+                        resolvedRefs.Add(r);
+                }
+
+                // 已追溯行：按价格类型取价
+                if (resolvedRefs.Count > 0)
+                {
+                    var resolvedBillNos = new List<string>();
+                    foreach (var r in resolvedRefs)
+                        if (!string.IsNullOrEmpty(r.SourceBillNo) && !resolvedBillNos.Contains(r.SourceBillNo))
+                            resolvedBillNos.Add(r.SourceBillNo);
+
+                    Dictionary<string, string> bizMap = PriceListQueryHelper.GetBusinessTypeMap(this.Context, resolvedBillNos);
+                    var reqs = new List<PriceListQueryHelper.PriceReq>();
+                    foreach (var r in resolvedRefs)
+                    {
+                        r.PriceType = PriceListQueryHelper.DerivePriceType(r.SourceType, r.SourceBillNo, bizMap);
+                        reqs.Add(new PriceListQueryHelper.PriceReq
                         {
-                            sourceBillNos.Add(r.SourceBillNo);
+                            SupplierId = r.SupplierId,
+                            MaterialId = r.MaterialId,
+                            PriceType = r.PriceType,
+                            IncludedTax = r.IncludedTax
+                        });
+                    }
+
+                    Dictionary<string, decimal?> priceMap = PriceListQueryHelper.GetLatestTaxPrice(this.Context, reqs);
+                    foreach (var r in resolvedRefs)
+                    {
+                        var req = new PriceListQueryHelper.PriceReq
+                        {
+                            SupplierId = r.SupplierId,
+                            MaterialId = r.MaterialId,
+                            PriceType = r.PriceType,
+                            IncludedTax = r.IncludedTax
+                        };
+
+                        if (priceMap.TryGetValue(PriceListQueryHelper.BuildKey(req), out decimal? price) && price.HasValue)
+                        {
+                            r.Entry["F_CustLi_PriceListTaxPrice"] = price.Value;
                         }
                     }
                 }
 
-                // 批量查采购入库单业务类型，推导价格类型
-                Dictionary<string, string> bizMap = PriceListQueryHelper.GetBusinessTypeMap(this.Context, sourceBillNos);
-                foreach (var r in refs)
+                // 未追溯行（无源单信息）：按供应商+物料取最新价格（不区分价格类型）
+                if (unresolvedRefs.Count > 0)
                 {
-                    r.PriceType = PriceListQueryHelper.DerivePriceType(r.SourceType, r.SourceBillNo, bizMap);
-                }
-
-                // 批量取价
-                var reqs = new List<PriceListQueryHelper.PriceReq>();
-                foreach (var r in refs)
-                {
-                    reqs.Add(new PriceListQueryHelper.PriceReq
+                    var reqs = new List<PriceListQueryHelper.PriceReq>();
+                    foreach (var r in unresolvedRefs)
                     {
-                        SupplierId = r.SupplierId,
-                        MaterialId = r.MaterialId,
-                        PriceType = r.PriceType,
-                        IncludedTax = r.IncludedTax
-                    });
-                }
+                        reqs.Add(new PriceListQueryHelper.PriceReq
+                        {
+                            SupplierId = r.SupplierId,
+                            MaterialId = r.MaterialId,
+                            PriceType = 0,
+                            IncludedTax = r.IncludedTax
+                        });
+                    }
 
-                Dictionary<string, decimal?> priceMap = PriceListQueryHelper.GetLatestTaxPrice(this.Context, reqs);
-
-                // 写回"价目表含税单价"字段
-                foreach (var r in refs)
-                {
-                    var req = new PriceListQueryHelper.PriceReq
+                    Dictionary<string, decimal?> priceMap = PriceListQueryHelper.GetLatestTaxPriceAnyType(this.Context, reqs);
+                    foreach (var r in unresolvedRefs)
                     {
-                        SupplierId = r.SupplierId,
-                        MaterialId = r.MaterialId,
-                        PriceType = r.PriceType,
-                        IncludedTax = r.IncludedTax
-                    };
-
-                    if (priceMap.TryGetValue(PriceListQueryHelper.BuildKey(req), out decimal? price) && price.HasValue)
-                    {
-                        r.Entry["F_CustLi_PriceListTaxPrice"] = price.Value;
+                        string anyKey = PriceListQueryHelper.BuildKeyNoType(
+                            r.SupplierId, r.MaterialId, r.IncludedTax ? 1 : 0);
+                        if (priceMap.TryGetValue(anyKey, out decimal? price) && price.HasValue)
+                        {
+                            r.Entry["F_CustLi_PriceListTaxPrice"] = price.Value;
+                        }
                     }
                 }
             }

@@ -245,6 +245,65 @@ namespace kingdee.CustLI.Business.PlugIn
             return map;
         }
 
+        /// <summary>
+        /// 按供应商 + 物料 + 是否含税 维度取最新含税单价（不区分价格类型）。
+        /// 当无法推导价格类型时（如没有源单信息），用此方法兜底。
+        /// </summary>
+        public static Dictionary<string, decimal?> GetLatestTaxPriceAnyType(Context ctx, List<PriceReq> reqs)
+        {
+            var result = new Dictionary<string, decimal?>();
+            if (reqs == null || reqs.Count == 0) return result;
+
+            var suppliers = new HashSet<long>();
+            var materials = new HashSet<long>();
+            var taxFlags = new HashSet<int>();
+
+            foreach (var r in reqs)
+            {
+                suppliers.Add(r.SupplierId);
+                materials.Add(r.MaterialId);
+                taxFlags.Add(r.IncludedTax ? 1 : 0);
+            }
+
+            string sql = string.Format(@"
+                SELECT a.FMATERIALID     AS FMATERIALID,
+                       b.FSUPPLIERID     AS FSUPPLIERID,
+                       b.FIsIncludedTax  AS FISINCLUDEDTAX,
+                       a.FTAXPRICE       AS FTAXPRICE,
+                       a.FEFFECTIVEDATE  AS FEFFECTIVEDATE
+                FROM t_PUR_PriceListEntry a
+                INNER JOIN t_PUR_PriceList b ON a.FID = b.FID
+                WHERE a.FMATERIALID    IN ({0})
+                  AND b.FSUPPLIERID    IN ({1})
+                  AND b.FIsIncludedTax IN ({2})
+                  AND a.FDISABLESTATUS <> 'A'
+                ORDER BY a.FEFFECTIVEDATE DESC
+                ",
+                string.Join(",", materials),
+                string.Join(",", suppliers),
+                string.Join(",", taxFlags));
+
+            DataSet ds = DBServiceHelper.ExecuteDataSet(ctx, sql);
+            if (ds == null || ds.Tables.Count == 0 || ds.Tables[0].Rows.Count == 0)
+                return result;
+
+            foreach (DataRow row in ds.Tables[0].Rows)
+            {
+                long mat = Convert.ToInt64(row["FMATERIALID"]);
+                long sup = Convert.ToInt64(row["FSUPPLIERID"]);
+                int tax = Convert.ToInt32(row["FISINCLUDEDTAX"]);
+                decimal price = (row["FTAXPRICE"] == DBNull.Value) ? 0m : Convert.ToDecimal(row["FTAXPRICE"]);
+
+                string key = BuildKeyNoType(sup, mat, tax);
+                if (!result.ContainsKey(key))
+                {
+                    result[key] = price;
+                }
+            }
+
+            return result;
+        }
+
         #endregion
 
         #region 内部工具
@@ -263,6 +322,14 @@ namespace kingdee.CustLI.Business.PlugIn
         private static string BuildKey(long sup, long mat, int pt, int tax)
         {
             return string.Format("{0}_{1}_{2}_{3}", sup, mat, pt, tax);
+        }
+
+        /// <summary>
+        /// 不区分价格类型的 key：sup_mat_tax
+        /// </summary>
+        public static string BuildKeyNoType(long sup, long mat, int tax)
+        {
+            return string.Format("{0}_{1}_{2}", sup, mat, tax);
         }
 
         #endregion
