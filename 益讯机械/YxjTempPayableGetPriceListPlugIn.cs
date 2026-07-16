@@ -75,9 +75,11 @@ namespace kingdee.CustLI.Business.PlugIn
                 ids.Add(Convert.ToInt64(pk));
             }
 
-            // 2. 加载单据（AP_Payable 与财务应付单同表单，需按立账类型过滤出暂估）
+            // 2. 加载单据（仅加载勾选行对应ID的单据）
             BusinessInfo info = this.View.BillBusinessInfo;
-            DynamicObject[] bills = BusinessDataServiceHelper.Load(this.Context, info, null, null);
+            string idFilter = string.Format("FID IN ({0})", string.Join(",", ids));
+            OQLFilter oqlFilter = OQLFilter.CreateHeadEntityFilter(idFilter);
+            DynamicObject[] bills = BusinessDataServiceHelper.Load(this.Context, info, null, oqlFilter);
             if (bills == null || bills.Length == 0)
             {
                 this.View.ShowMessage("加载单据失败，请确认单据状态。");
