@@ -56,11 +56,11 @@ namespace kingdee.CustLI.Business.PlugIn
         }
 
         /// <summary>
-        /// 事务内、实际执行前：读取并填充"价目表含税单价"
+        /// 持久化前：读取并填充"价目表含税单价"
         /// </summary>
-        public override void BeginOperationTransaction(BeginOperationTransactionArgs e)
+        public override void BeforeExecuteOperationTransaction(BeforeExecuteOperationTransaction e)
         {
-            base.BeginOperationTransaction(e);
+            base.BeforeExecuteOperationTransaction(e);
 
             foreach (DynamicObject bill in e.DataEntitys)
             {
