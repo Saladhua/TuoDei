@@ -123,6 +123,40 @@ namespace kingdee.CustLI.Business.PlugIn
                     continue;
                 }
 
+                // 追溯源单：财务应付单 → 暂估应付单 → 入库单
+                var apBillNos = new List<string>();
+                foreach (var r in refs)
+                {
+                    if (r.SourceType == "AP_Payable" && !string.IsNullOrEmpty(r.SourceBillNo)
+                        && !apBillNos.Contains(r.SourceBillNo))
+                    {
+                        apBillNos.Add(r.SourceBillNo);
+                    }
+                }
+
+                Dictionary<string, string[]> tempSrcMap = null;
+                if (apBillNos.Count > 0)
+                {
+                    tempSrcMap = PriceListQueryHelper.GetTempPayableSourceMap(this.Context, apBillNos);
+                    sourceBillNos.Clear();
+                    foreach (var r in refs)
+                    {
+                        if (r.SourceType == "AP_Payable" && !string.IsNullOrEmpty(r.SourceBillNo))
+                        {
+                            string key = string.Format("{0}_{1}", r.SourceBillNo, r.MaterialId);
+                            if (tempSrcMap.TryGetValue(key, out string[] originalSrc))
+                            {
+                                r.SourceType = originalSrc[0];
+                                r.SourceBillNo = originalSrc[1];
+                            }
+                        }
+                        if (!string.IsNullOrEmpty(r.SourceBillNo) && !sourceBillNos.Contains(r.SourceBillNo))
+                        {
+                            sourceBillNos.Add(r.SourceBillNo);
+                        }
+                    }
+                }
+
                 // 批量查采购入库单业务类型，推导价格类型
                 Dictionary<string, string> bizMap = PriceListQueryHelper.GetBusinessTypeMap(this.Context, sourceBillNos);
                 foreach (var r in refs)

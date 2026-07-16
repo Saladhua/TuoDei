@@ -191,6 +191,60 @@ namespace kingdee.CustLI.Business.PlugIn
             return map;
         }
 
+        /// <summary>
+        /// 追溯暂估应付单的源单信息：财务应付单的 FSourceBillNo 指向暂估应付单，
+        /// 需要查暂估应付单本身的源单（通常是采购入库单）来推导价格类型。
+        /// 返回 key = "暂估单号_物料内码" → [FSOURCETYPE, FSourceBillNo]
+        /// </summary>
+        public static Dictionary<string, string[]> GetTempPayableSourceMap(Context ctx, List<string> tempBillNos)
+        {
+            var map = new Dictionary<string, string[]>(StringComparer.OrdinalIgnoreCase);
+            if (tempBillNos == null || tempBillNos.Count == 0) return map;
+
+            var distinct = new List<string>();
+            foreach (var n in tempBillNos)
+            {
+                if (!string.IsNullOrEmpty(n) && !distinct.Contains(n))
+                    distinct.Add(n.Replace("'", "''"));
+            }
+            if (distinct.Count == 0) return map;
+
+            string sql = string.Format(
+                @"/*dialect*/ SELECT b.FBILLNO AS FBillNo, e.FMATERIALID, e.FSOURCETYPE, e.FSourceBillNo
+                  FROM T_AP_PAYABLEENTRY e
+                  INNER JOIN T_AP_PAYABLE b ON e.FID = b.FID
+                  WHERE b.FBILLNO IN ('{0}')
+                    AND b.FSETACCOUNTTYPE = 2
+                    AND e.FSOURCETYPE IS NOT NULL
+                    AND e.FSOURCETYPE <> ''
+                    AND e.FSourceBillNo IS NOT NULL
+                    AND e.FSourceBillNo <> ''",
+                string.Join("','", distinct));
+
+            DataSet ds = DBServiceHelper.ExecuteDataSet(ctx, sql);
+            if (ds != null && ds.Tables.Count > 0)
+            {
+                foreach (DataRow row in ds.Tables[0].Rows)
+                {
+                    string billNo = (row["FBillNo"] == DBNull.Value) ? "" : row["FBillNo"].ToString();
+                    long matId = (row["FMATERIALID"] == DBNull.Value) ? 0L : Convert.ToInt64(row["FMATERIALID"]);
+                    string srcType = (row["FSOURCETYPE"] == DBNull.Value) ? "" : row["FSOURCETYPE"].ToString();
+                    string srcBillNo = (row["FSourceBillNo"] == DBNull.Value) ? "" : row["FSourceBillNo"].ToString();
+
+                    if (!string.IsNullOrEmpty(billNo) && !string.IsNullOrEmpty(srcType) && !string.IsNullOrEmpty(srcBillNo))
+                    {
+                        string key = string.Format("{0}_{1}", billNo, matId);
+                        if (!map.ContainsKey(key))
+                        {
+                            map[key] = new[] { srcType, srcBillNo };
+                        }
+                    }
+                }
+            }
+
+            return map;
+        }
+
         #endregion
 
         #region 内部工具
