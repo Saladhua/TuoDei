@@ -92,10 +92,6 @@ namespace kingdee.CustLI.Business.PlugIn
 
             foreach (DynamicObject bill in bills)
             {
-                // 仅处理用户勾选的行
-                long billId = Convert.ToInt64(bill["Id"]);
-                if (!ids.Contains(billId)) continue;
-
                 // 仅处理暂估立账类型
                 string acctType = (bill["FSETACCOUNTTYPE"] == null) ? string.Empty : bill["FSETACCOUNTTYPE"].ToString();
                 if (acctType != AcctTypeTemp)
@@ -199,7 +195,7 @@ namespace kingdee.CustLI.Business.PlugIn
             // 6. 手动计算所有金额字段 + 收集 FEntryId（用于 SQL 批量 UPDATE 兜底）
             int filledCount = 0;
             const decimal taxRate = 0.13m;
-            var entryUpdates = new Dictionary<long, (string price, string allAmt, string noTaxAmt, string taxAmt)>();
+            var entryUpdates = new Dictionary<long, (string taxPrice, string price, string allAmt, string noTaxAmt, string taxAmt)>();
             var headerTotals = new Dictionary<long, string>();
 
             foreach (var r in refs)
@@ -229,6 +225,7 @@ namespace kingdee.CustLI.Business.PlugIn
 
                     long entryId = Convert.ToInt64(r.Entry["Id"]);
                     entryUpdates[entryId] = (
+                        taxPrice.ToString("F6", CultureInfo.InvariantCulture),
                         unitPrice.ToString("F6", CultureInfo.InvariantCulture),
                         allAmt.ToString("F2", CultureInfo.InvariantCulture),
                         noTaxAmt.ToString("F2", CultureInfo.InvariantCulture),
@@ -283,6 +280,10 @@ namespace kingdee.CustLI.Business.PlugIn
                 string billIdList = string.Join(",", headerTotals.Keys);
 
                 sb.Append("UPDATE T_AP_PAYABLEENTRY SET ");
+                sb.Append("FTAXPRICE = CASE FENTRYID ");
+                foreach (var kv in entryUpdates)
+                    sb.AppendFormat("WHEN {0} THEN {1} ", kv.Key, kv.Value.taxPrice);
+                sb.Append("END, ");
                 sb.Append("FPrice = CASE FENTRYID ");
                 foreach (var kv in entryUpdates)
                     sb.AppendFormat("WHEN {0} THEN {1} ", kv.Key, kv.Value.price);
