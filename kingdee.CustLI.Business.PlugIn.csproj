@@ -182,6 +182,7 @@
     <Compile Include="益讯机械\YxjTempPayableGetPriceListPlugIn.cs" />
     <Compile Include="益讯机械\YxjAPPayableSaveGetPricePlugIn.cs" />
     <Compile Include="益讯机械\YxjAPPayableSubmitValidatePlugIn.cs" />
+    <Compile Include="飞亚货架\FeYBatchSave.cs" />
   </ItemGroup>
   <ItemGroup />
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
