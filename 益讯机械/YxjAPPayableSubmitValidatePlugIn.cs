@@ -80,21 +80,12 @@ namespace kingdee.CustLI.Business.PlugIn
                     // 考虑尾差，绝对值小于容差视为一致
                     if (Math.Abs(invoicePrice - listPrice) > Tolerance)
                     {
-                        // 非阻断提醒：SuccessStatus = true，仅提示采购员
-                        var result = new OperateResult();
-                        result.SuccessStatus = false;
-                        result.Name = "价目表不一致提醒";
-                        result.PKValue = pkValue;
-                        result.Number = billNo;
-                        result.Message = string.Format(
+                        throw new KDBusinessException("", string.Format(
                             "单据[{0}] 第 {1} 行：发票含税单价 {2} 与价目表含税单价 {3} 不一致，请确认是否需要更新采购价目表。",
                             billNo,
                             entry["SEQ"],
                             invoicePrice,
-                            listPrice);
-
-                        this.OperationResult.OperateResult.Add(result);
-                        return;
+                            listPrice));
                     }
                 }
             }
