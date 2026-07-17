@@ -82,7 +82,7 @@ namespace kingdee.CustLI.Business.PlugIn
                     {
                         // 非阻断提醒：SuccessStatus = true，仅提示采购员
                         var result = new OperateResult();
-                        result.SuccessStatus = true;
+                        result.SuccessStatus = false;
                         result.Name = "价目表不一致提醒";
                         result.PKValue = pkValue;
                         result.Number = billNo;
@@ -94,6 +94,7 @@ namespace kingdee.CustLI.Business.PlugIn
                             listPrice);
 
                         this.OperationResult.OperateResult.Add(result);
+                        return;
                     }
                 }
             }
