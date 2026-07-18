@@ -224,6 +224,9 @@ namespace kingdee.CustLI.Business.PlugIn
                     r.Entry["FALLAMOUNTFOR_D"] = allAmt;
                     r.Entry["FNoTaxAmountFor_D"] = noTaxAmt;
                     r.Entry["FTAXAMOUNTFOR_D"] = taxAmt;
+                    r.Entry["FALLAMOUNT"] = allAmt;
+                    r.Entry["FNOTAXAMOUNT"] = noTaxAmt;
+                    r.Entry["FTAXAMOUNT"] = taxAmt;
 
                     long entryId = Convert.ToInt64(r.Entry["Id"]);
                     entryUpdates[entryId] = (
@@ -299,6 +302,18 @@ namespace kingdee.CustLI.Business.PlugIn
                     sb.AppendFormat("WHEN {0} THEN {1} ", kv.Key, kv.Value.noTaxAmt);
                 sb.Append("END, ");
                 sb.Append("FTAXAMOUNTFOR = CASE FENTRYID ");
+                foreach (var kv in entryUpdates)
+                    sb.AppendFormat("WHEN {0} THEN {1} ", kv.Key, kv.Value.taxAmt);
+                sb.Append("END, ");
+                sb.Append("FALLAMOUNT = CASE FENTRYID ");
+                foreach (var kv in entryUpdates)
+                    sb.AppendFormat("WHEN {0} THEN {1} ", kv.Key, kv.Value.allAmt);
+                sb.Append("END, ");
+                sb.Append("FNOTAXAMOUNT = CASE FENTRYID ");
+                foreach (var kv in entryUpdates)
+                    sb.AppendFormat("WHEN {0} THEN {1} ", kv.Key, kv.Value.noTaxAmt);
+                sb.Append("END, ");
+                sb.Append("FTAXAMOUNT = CASE FENTRYID ");
                 foreach (var kv in entryUpdates)
                     sb.AppendFormat("WHEN {0} THEN {1} ", kv.Key, kv.Value.taxAmt);
                 sb.Append("END ");

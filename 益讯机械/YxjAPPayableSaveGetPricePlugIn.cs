@@ -193,8 +193,8 @@ namespace kingdee.CustLI.Business.PlugIn
                         if (priceMap.TryGetValue(key, out PriceListQueryHelper.PriceBothResult entryResult))
                         {
                             r.Entry["F_CustLi_PriceListTaxPrice"] = r.IncludedTax
-                                ? (entryResult.TaxPrice ?? entryResult.Price ?? 0m)
-                                : (entryResult.Price ?? entryResult.TaxPrice ?? 0m);
+                                ? Math.Round(entryResult.TaxPrice ?? entryResult.Price ?? 0m, 6)
+                                : Math.Round(entryResult.Price ?? entryResult.TaxPrice ?? 0m, 6);
                         }
                     }
                 }
@@ -223,8 +223,8 @@ namespace kingdee.CustLI.Business.PlugIn
                         if (priceMap.TryGetValue(key, out PriceListQueryHelper.PriceBothResult entryResult))
                         {
                             r.Entry["F_CustLi_PriceListTaxPrice"] = r.IncludedTax
-                                ? (entryResult.TaxPrice ?? entryResult.Price ?? 0m)
-                                : (entryResult.Price ?? entryResult.TaxPrice ?? 0m);
+                                ? Math.Round(entryResult.TaxPrice ?? entryResult.Price ?? 0m, 6)
+                                : Math.Round(entryResult.Price ?? entryResult.TaxPrice ?? 0m, 6);
                         }
                     }
                 }
