@@ -8,8 +8,6 @@
  *
  *   请求体示例（生产入库单 — PRD_INSTOCK）：
  *   {
- *     "UserName": "kd01",
- *     "Password": "123qwe..",
  *     "FormId": "PRD_INSTOCK",
  *     "DataList": [
  *       {
@@ -31,13 +29,6 @@
  *
  *   说明：
  *   - DataCenterId（账套ID）已在接口内部写死，外部调用无需传入
- *   - 本接口内部自动完成登录
- *   - 既是登录也是保存，外部系统只需 POST 这个地址，传入 UserName + Password 即可
- *
- *   如果外部系统需要先单独调用金蝶标准登录接口，地址如下：
- *   POST http://127.0.0.1/k3cloud/Kingdee.BOS.WebApi.ServicesStub.AuthService.ValidateUser.common.kdsvc
- *   Body: { "parameters": ["6979e702b71b4c", "kd01", "123qwe..", 2052] }
- *   返回 LoginResultType=1 表示登录成功
  *
  * ──────────────────────────────────────────
  * 二、支持的单据类型（通过 FormId 区分）
@@ -65,7 +56,6 @@ using System.IO;
 using System.Net;
 using System.Text;
 using System.Web;
-using System.Web.Caching;
 using Kingdee.BOS;
 using Kingdee.BOS.Core.DynamicForm;
 using Kingdee.BOS.ServiceFacade.KDServiceFx;
@@ -77,7 +67,6 @@ namespace kingdee.CustLI.Business.PlugIn
 {
     public class FeYBatchSave : AbstractWebApiBusinessService
     {
-        private const string DataCenterId = "6979e702b71b4c";
         private const string CloudUrl = "http://localhost/k3cloud/";
 
         public FeYBatchSave(KDServiceContext context)
@@ -89,14 +78,6 @@ namespace kingdee.CustLI.Business.PlugIn
         {
             try
             {
-                string userName = request["UserName"] != null ? request["UserName"].ToString() : "";
-                string password = request["Password"] != null ? request["Password"].ToString() : "";
-
-                if (!Login(DataCenterId, userName, password))
-                {
-                    return BuildResult(false, "金蝶登录失败，请检查用户名密码", 0, 0, new JArray());
-                }
-
                 string formId = request["FormId"] != null ? request["FormId"].ToString() : "";
                 JArray dataList = request["DataList"] as JArray;
 
@@ -125,39 +106,39 @@ namespace kingdee.CustLI.Business.PlugIn
             }
         }
 
-        private bool Login(string ztid, string userName, string password)
-        {
-            if (!string.IsNullOrEmpty(HttpRuntime.Cache.Get("LoginCookie") as string))
-            {
-                return true;
-            }
+        //private bool Login(string ztid, string userName, string password)
+        //{
+        //    if (!string.IsNullOrEmpty(HttpRuntime.Cache.Get("LoginCookie") as string))
+        //    {
+        //        return true;
+        //    }
 
-            string url = string.Concat(CloudUrl, "Kingdee.BOS.WebApi.ServicesStub.AuthService.ValidateUser.common.kdsvc");
-            List<object> Parameters = new List<object>();
-            Parameters.Add(ztid);
-            Parameters.Add(userName);
-            Parameters.Add(password);
-            Parameters.Add(2052);
-            string content = JsonConvert.SerializeObject(Parameters);
+        //    string url = string.Concat(CloudUrl, "Kingdee.BOS.WebApi.ServicesStub.AuthService.ValidateUser.common.kdsvc");
+        //    List<object> Parameters = new List<object>();
+        //    Parameters.Add(ztid);
+        //    Parameters.Add(userName);
+        //    Parameters.Add(password);
+        //    Parameters.Add(2052);
+        //    string content = JsonConvert.SerializeObject(Parameters);
 
-            try
-            {
-                string result = HttpPost(url, content);
-                var iResult = JObject.Parse(result)["LoginResultType"].Value<int>();
+        //    try
+        //    {
+        //        string result = HttpPost(url, content);
+        //        var iResult = JObject.Parse(result)["LoginResultType"].Value<int>();
 
-                if (iResult == 1 || iResult == -5)
-                {
-                    HttpRuntime.Cache.Insert("LoginCookie", "1", null, DateTime.Now.AddMinutes(10), Cache.NoSlidingExpiration);
-                    return true;
-                }
+        //        if (iResult == 1 || iResult == -5)
+        //        {
+        //            HttpRuntime.Cache.Insert("LoginCookie", "1", null, DateTime.Now.AddMinutes(10), Cache.NoSlidingExpiration);
+        //            return true;
+        //        }
 
-                return false;
-            }
-            catch (Exception e)
-            {
-                throw new Exception(e.ToString());
-            }
-        }
+        //        return false;
+        //    }
+        //    catch (Exception e)
+        //    {
+        //        throw new Exception(e.ToString());
+        //    }
+        //}
 
         private string BatchSaveCall(string formId, string content)
         {

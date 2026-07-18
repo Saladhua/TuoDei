@@ -72,10 +72,12 @@ namespace kingdee.CustLI.Business.PlugIn
 
                 foreach (DynamicObject entry in entryObjs)
                 {
-                    decimal invoicePrice = (entry["TaxPrice"] == null) ? 0m : Convert.ToDecimal(entry["TaxPrice"]);
-                    decimal listPrice = (entry["F_CustLi_PriceListTaxPrice"] == null)
-                        ? 0m
-                        : Convert.ToDecimal(entry["F_CustLi_PriceListTaxPrice"]);
+                    decimal invoicePrice = 0m;
+                    if (entry["TaxPrice"] != null && !(entry["TaxPrice"] is DBNull))
+                        decimal.TryParse(entry["TaxPrice"].ToString(), out invoicePrice);
+                    decimal listPrice = 0m;
+                    if (entry["F_CustLi_PriceListTaxPrice"] != null && !(entry["F_CustLi_PriceListTaxPrice"] is DBNull))
+                        decimal.TryParse(entry["F_CustLi_PriceListTaxPrice"].ToString(), out listPrice);
 
                     // 考虑尾差，绝对值小于容差视为一致
                     if (Math.Abs(invoicePrice - listPrice) > Tolerance)
