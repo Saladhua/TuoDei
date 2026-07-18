@@ -66,12 +66,13 @@ namespace kingdee.CustLI.Business.PlugIn
             // 2. 拼接 SQL：物理表 t_PUR_PriceList(头) + t_PUR_PriceListEntry(体)
             //    过滤：供应商 / 物料 / 价格类型 / 是否含税 / 未禁用(FDISABLESTATUS<>'A')
             //    按生效日期降序，保证同维度第一条即"最新"
-            string sql = string.Format(@"
+             string sql = string.Format(@"
                 SELECT a.FMATERIALID     AS FMATERIALID,
                        b.FSUPPLIERID     AS FSUPPLIERID,
                        b.FPriceType      AS FPRICETYPE,
                        b.FIsIncludedTax  AS FISINCLUDEDTAX,
                        a.FTAXPRICE       AS FTAXPRICE,
+                       a.FPRICE          AS FPRICE,
                        a.FEFFECTIVEDATE  AS FEFFECTIVEDATE
                 FROM t_PUR_PriceListEntry a
                 INNER JOIN t_PUR_PriceList b ON a.FID = b.FID
@@ -94,15 +95,18 @@ namespace kingdee.CustLI.Business.PlugIn
             }
 
             // 3. 组装结果：按维度key去重，因已按生效日期降序，首个即最新
+            //    含税(tax==1)取FTAXPRICE，不含税(tax==0)取FPRICE
             foreach (DataRow row in ds.Tables[0].Rows)
             {
                 long mat = Convert.ToInt64(row["FMATERIALID"]);
                 long sup = Convert.ToInt64(row["FSUPPLIERID"]);
                 int pt = Convert.ToInt32(row["FPRICETYPE"]);
                 int tax = Convert.ToInt32(row["FISINCLUDEDTAX"]);
-                decimal price = (row["FTAXPRICE"] == DBNull.Value)
-                    ? 0m
-                    : Convert.ToDecimal(row["FTAXPRICE"]);
+                decimal price;
+                if (tax == 1)
+                    price = (row["FTAXPRICE"] == DBNull.Value) ? 0m : Convert.ToDecimal(row["FTAXPRICE"]);
+                else
+                    price = (row["FPRICE"] == DBNull.Value) ? 0m : Convert.ToDecimal(row["FPRICE"]);
 
                 string key = BuildKey(sup, mat, pt, tax);
                 if (!result.ContainsKey(key))
@@ -270,6 +274,7 @@ namespace kingdee.CustLI.Business.PlugIn
                        b.FSUPPLIERID     AS FSUPPLIERID,
                        b.FIsIncludedTax  AS FISINCLUDEDTAX,
                        a.FTAXPRICE       AS FTAXPRICE,
+                       a.FPRICE          AS FPRICE,
                        a.FEFFECTIVEDATE  AS FEFFECTIVEDATE
                 FROM t_PUR_PriceListEntry a
                 INNER JOIN t_PUR_PriceList b ON a.FID = b.FID
@@ -292,7 +297,11 @@ namespace kingdee.CustLI.Business.PlugIn
                 long mat = Convert.ToInt64(row["FMATERIALID"]);
                 long sup = Convert.ToInt64(row["FSUPPLIERID"]);
                 int tax = Convert.ToInt32(row["FISINCLUDEDTAX"]);
-                decimal price = (row["FTAXPRICE"] == DBNull.Value) ? 0m : Convert.ToDecimal(row["FTAXPRICE"]);
+                decimal price;
+                if (tax == 1)
+                    price = (row["FTAXPRICE"] == DBNull.Value) ? 0m : Convert.ToDecimal(row["FTAXPRICE"]);
+                else
+                    price = (row["FPRICE"] == DBNull.Value) ? 0m : Convert.ToDecimal(row["FPRICE"]);
 
                 string key = BuildKeyNoType(sup, mat, tax);
                 if (!result.ContainsKey(key))

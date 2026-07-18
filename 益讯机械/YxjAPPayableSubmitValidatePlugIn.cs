@@ -36,9 +36,11 @@ namespace kingdee.CustLI.Business.PlugIn
             base.OnPreparePropertys(e);
 
             e.FieldKeys.Add("FSETACCOUNTTYPE");            // 立账类型：区分暂估/财务
+            e.FieldKeys.Add("ISTAX");                     // 是否含税（表头）
             e.FieldKeys.Add("AP_PAYABLEENTRY");           // 单据体
-            e.FieldKeys.Add("FTAXPRICE"); // 发票含税单价
-            e.FieldKeys.Add("F_CustLi_PriceListTaxPrice"); // 价目表含税单价
+            e.FieldKeys.Add("FTAXPRICE");                 // 发票含税单价
+            e.FieldKeys.Add("FPrice");                    // 发票单价（不含税）
+            e.FieldKeys.Add("F_CustLi_PriceListTaxPrice"); // 价目表价格
         }
 
 
@@ -50,6 +52,8 @@ namespace kingdee.CustLI.Business.PlugIn
         {
             base.BeginOperationTransaction(e);
 
+            var errors = new List<string>();
+
             foreach (DynamicObject bill in e.DataEntitys)
             {
                 // 仅财务应付单（立账类型 = 3）
@@ -58,6 +62,8 @@ namespace kingdee.CustLI.Business.PlugIn
                 {
                     continue;
                 }
+
+                bool includedTax = (bill["ISTAX"] != null) && Convert.ToBoolean(bill["ISTAX"]);
 
                 var entryObjs = bill["AP_PAYABLEENTRY"] as DynamicObjectCollection;
                 if (entryObjs == null)
@@ -68,13 +74,21 @@ namespace kingdee.CustLI.Business.PlugIn
                 // 单据编号（用于提醒信息展示）
                 string billNo = ObjectUtils.Object2String(
                     this.BusinessInfo.GetBillNoField().DynamicProperty.GetValueFast(bill));
-                object pkValue = bill["Id"];
 
                 foreach (DynamicObject entry in entryObjs)
                 {
                     decimal invoicePrice = 0m;
-                    if (entry["TaxPrice"] != null && !(entry["TaxPrice"] is DBNull))
-                        decimal.TryParse(entry["TaxPrice"].ToString(), out invoicePrice);
+                    if (includedTax)
+                    {
+                        if (entry["TaxPrice"] != null && !(entry["TaxPrice"] is DBNull))
+                            decimal.TryParse(entry["TaxPrice"].ToString(), out invoicePrice);
+                    }
+                    else
+                    {
+                        if (entry["FPrice"] != null && !(entry["FPrice"] is DBNull))
+                            decimal.TryParse(entry["FPrice"].ToString(), out invoicePrice);
+                    }
+
                     decimal listPrice = 0m;
                     if (entry["F_CustLi_PriceListTaxPrice"] != null && !(entry["F_CustLi_PriceListTaxPrice"] is DBNull))
                         decimal.TryParse(entry["F_CustLi_PriceListTaxPrice"].ToString(), out listPrice);
@@ -82,14 +96,17 @@ namespace kingdee.CustLI.Business.PlugIn
                     // 考虑尾差，绝对值小于容差视为一致
                     if (Math.Abs(invoicePrice - listPrice) > Tolerance)
                     {
-                        throw new KDBusinessException("", string.Format(
-                            "单据[{0}] 第 {1} 行：发票含税单价 {2} 与价目表含税单价 {3} 不一致，请确认是否需要更新采购价目表。",
+                        errors.Add(string.Format(
+                            "单据[{0}] 第 {1} 行 不一致，请确认是否需要更新采购价目表。",
                             billNo,
-                            entry["SEQ"],
-                            invoicePrice,
-                            listPrice));
+                            entry["SEQ"]));
                     }
                 }
+            }
+
+            if (errors.Count > 0)
+            {
+                throw new KDBusinessException("", string.Join("\n", errors));
             }
 
             // 确保提醒信息在客户端弹出
