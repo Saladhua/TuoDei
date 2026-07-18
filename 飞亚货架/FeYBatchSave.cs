@@ -74,10 +74,11 @@ namespace kingdee.CustLI.Business.PlugInWebApi
         {
         }
 
-        public JObject ExecuteService(JObject request)
+        public JObject ExecuteService(string requestStr)
         {
             try
             {
+                JObject request = JObject.Parse(requestStr);
                 string formId = request["FormId"] != null ? request["FormId"].ToString() : "";
                 JArray dataList = request["DataList"] as JArray;
 
