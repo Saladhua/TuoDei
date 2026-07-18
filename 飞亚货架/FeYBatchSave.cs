@@ -87,7 +87,6 @@ namespace kingdee.CustLI.Business.PlugIn
 
         public JObject ExecuteService(JObject request)
         {
-            JObject jsonRoot = new JObject();
             try
             {
                 string userName = request["UserName"] != null ? request["UserName"].ToString() : "";
@@ -95,10 +94,7 @@ namespace kingdee.CustLI.Business.PlugIn
 
                 if (!Login(DataCenterId, userName, password))
                 {
-                    jsonRoot["IsSuccess"] = false;
-                    jsonRoot["DocNo"] = "";
-                    jsonRoot["Error"] = "金蝶登录失败，请检查用户名密码";
-                    return jsonRoot;
+                    return BuildResult(false, "金蝶登录失败，请检查用户名密码", 0, 0, new JArray());
                 }
 
                 string formId = request["FormId"] != null ? request["FormId"].ToString() : "";
@@ -106,100 +102,26 @@ namespace kingdee.CustLI.Business.PlugIn
 
                 if (string.IsNullOrEmpty(formId))
                 {
-                    jsonRoot["IsSuccess"] = false;
-                    jsonRoot["DocNo"] = "";
-                    jsonRoot["Error"] = "FormId 不能为空";
-                    return jsonRoot;
+                    return BuildResult(false, "FormId 不能为空", 0, 0, new JArray());
                 }
 
                 if (dataList == null || dataList.Count == 0)
                 {
-                    jsonRoot["IsSuccess"] = false;
-                    jsonRoot["DocNo"] = "";
-                    jsonRoot["Error"] = "DataList 不能为空";
-                    return jsonRoot;
+                    return BuildResult(false, "DataList 不能为空", 0, 0, new JArray());
                 }
 
                 string batchJson = BuildBatchSaveJson(formId, dataList);
                 if (batchJson == null)
                 {
-                    jsonRoot["IsSuccess"] = false;
-                    jsonRoot["DocNo"] = "";
-                    jsonRoot["Error"] = "不支持的 FormId: " + formId;
-                    return jsonRoot;
+                    return BuildResult(false, "不支持的 FormId: " + formId, 0, 0, new JArray());
                 }
 
                 string rawResult = BatchSaveCall(formId, batchJson);
-
-                JObject resultJObject = JObject.Parse(rawResult);
-
-                bool isSuccess = resultJObject["Result"] != null
-                    && resultJObject["Result"]["ResponseStatus"] != null
-                    && resultJObject["Result"]["ResponseStatus"]["IsSuccess"] != null
-                    && resultJObject["Result"]["ResponseStatus"]["IsSuccess"].Value<bool>();
-
-                JArray errors = resultJObject["Result"] != null
-                    && resultJObject["Result"]["ResponseStatus"] != null
-                    && resultJObject["Result"]["ResponseStatus"]["Errors"] != null
-                    ? resultJObject["Result"]["ResponseStatus"]["Errors"] as JArray
-                    : new JArray();
-
-                JArray successEntities = resultJObject["Result"] != null
-                    && resultJObject["Result"]["ResponseStatus"] != null
-                    && resultJObject["Result"]["ResponseStatus"]["SuccessEntities"] != null
-                    ? resultJObject["Result"]["ResponseStatus"]["SuccessEntities"] as JArray
-                    : new JArray();
-
-                int successCount = 0;
-                int failCount = 0;
-                string docNo = "";
-
-                if (successEntities != null && successEntities.Count > 0)
-                {
-                    successCount = successEntities.Count;
-                    if (successEntities[0]["Number"] != null)
-                    {
-                        docNo = successEntities[0]["Number"].ToString();
-                    }
-                }
-
-                if (errors != null)
-                {
-                    failCount = errors.Count;
-                }
-
-                if (isSuccess && failCount == 0)
-                {
-                    jsonRoot["IsSuccess"] = true;
-                    jsonRoot["DocNo"] = docNo;
-                    jsonRoot["Error"] = "";
-                }
-                else
-                {
-                    string errMsg = "";
-                    if (errors != null)
-                    {
-                        foreach (var err in errors)
-                        {
-                            if (err["Message"] != null)
-                            {
-                                errMsg += err["Message"].ToString() + "; ";
-                            }
-                        }
-                    }
-                    jsonRoot["IsSuccess"] = false;
-                    jsonRoot["DocNo"] = docNo;
-                    jsonRoot["Error"] = errMsg;
-                }
-
-                return jsonRoot;
+                return MapBatchSaveResult(rawResult, dataList.Count);
             }
             catch (Exception ex)
             {
-                jsonRoot["IsSuccess"] = false;
-                jsonRoot["DocNo"] = "";
-                jsonRoot["Error"] = "接口异常: " + ex.Message;
-                return jsonRoot;
+                return BuildResult(false, "接口异常: " + ex.Message, 0, 0, new JArray());
             }
         }
 
@@ -406,6 +328,110 @@ namespace kingdee.CustLI.Business.PlugIn
                 default:
                     return "";
             }
+        }
+
+        private JObject MapBatchSaveResult(string rawResult, int totalCount)
+        {
+            JObject result = BuildResult(true, "操作完成", totalCount, 0, new JArray());
+
+            try
+            {
+                JObject rawJson = JObject.Parse(rawResult);
+                JObject responseStatus = rawJson["Result"] != null && rawJson["Result"]["ResponseStatus"] != null
+                    ? rawJson["Result"]["ResponseStatus"] as JObject
+                    : rawJson["ResponseStatus"] as JObject;
+
+                JArray details = new JArray();
+                int successCount = 0;
+                int failCount = 0;
+
+                JArray successEntities = responseStatus != null && responseStatus["SuccessEntities"] != null
+                    ? responseStatus["SuccessEntities"] as JArray
+                    : new JArray();
+
+                JArray errors = responseStatus != null && responseStatus["Errors"] != null
+                    ? responseStatus["Errors"] as JArray
+                    : new JArray();
+
+                int maxItems = Math.Max(
+                    successEntities != null ? successEntities.Count : 0,
+                    errors != null ? errors.Count : 0
+                );
+                maxItems = Math.Max(maxItems, totalCount);
+
+                for (int i = 0; i < maxItems; i++)
+                {
+                    JObject detail = new JObject();
+                    detail.Add("Index", i);
+                    detail.Add("Success", false);
+                    detail.Add("BillNo", "");
+                    detail.Add("Id", "");
+                    detail.Add("Message", "");
+
+                    bool foundSuccess = false;
+                    if (successEntities != null)
+                    {
+                        foreach (var se in successEntities)
+                        {
+                            if (se["DIndex"] != null && Convert.ToInt32(se["DIndex"]) == i)
+                            {
+                                detail["Success"] = true;
+                                detail["BillNo"] = se["Number"] != null ? se["Number"].ToString() : "";
+                                detail["Id"] = se["Id"] != null ? se["Id"].ToString() : "";
+                                foundSuccess = true;
+                                break;
+                            }
+                        }
+                    }
+
+                    if (!foundSuccess && errors != null)
+                    {
+                        foreach (var err in errors)
+                        {
+                            if (err["DIndex"] != null && Convert.ToInt32(err["DIndex"]) == i)
+                            {
+                                detail["Message"] = err["Message"] != null ? err["Message"].ToString() : "";
+                                break;
+                            }
+                        }
+                    }
+
+                    details.Add(detail);
+
+                    if (detail["Success"] != null && detail["Success"].Value<bool>())
+                    {
+                        successCount++;
+                    }
+                    else if (!string.IsNullOrEmpty(detail["Message"] != null ? detail["Message"].ToString() : ""))
+                    {
+                        failCount++;
+                    }
+                }
+
+                result["Message"] = "操作完成，成功" + successCount + "条，失败" + failCount + "条";
+                result["Data"]["SuccessCount"] = successCount;
+                result["Data"]["FailCount"] = failCount;
+                result["Data"]["Details"] = details;
+                result["Success"] = failCount == 0;
+            }
+            catch
+            {
+                result["Data"]["Details"] = new JArray();
+            }
+
+            return result;
+        }
+
+        private JObject BuildResult(bool success, string message, int successCount, int failCount, JArray details)
+        {
+            JObject result = new JObject();
+            result.Add("Success", success);
+            result.Add("Message", message);
+            result.Add("Data", new JObject());
+            result["Data"]["SuccessCount"] = successCount;
+            result["Data"]["FailCount"] = failCount;
+            result["Data"]["Details"] = details;
+            return result;
         }
 
         private JObject Creat_JsonChildObject(string fckey, string fcval)
