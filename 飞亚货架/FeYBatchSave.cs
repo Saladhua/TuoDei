@@ -46,6 +46,70 @@
  *   - 默认库存组织：100
  *   - 本接口为自定义二开接口，不做热加载（HotUpdate）
  *
+ * ──────────────────────────────────────────
+ * 四、生产入库单 BatchSave 成功示例（供参考）
+ * ──────────────────────────────────────────
+ * {
+ *   "NeedUpDateFields": [],
+ *   "NeedReturnFields": [],
+ *   "IsDeleteEntry": "true",
+ *   "SubSystemId": "",
+ *   "IsVerifyBaseDataField": "false",
+ *   "IsEntryBatchFill": "true",
+ *   "ValidateFlag": "true",
+ *   "NumberSearch": "true",
+ *   "IsAutoAdjustField": "false",
+ *   "InterationFlags": "",
+ *   "IgnoreInterationFlag": "",
+ *   "IsControlPrecision": "false",
+ *   "ValidateRepeatJson": "false",
+ *   "Model": {
+ *     "FBillType": { "FNUMBER": "SCRKD02_SYS" },
+ *     "FDate": "2026-07-18 00:00:00",
+ *     "FStockOrgId": { "FNumber": "100" },
+ *     "FPrdOrgId": { "FNumber": "100" },
+ *     "FOwnerTypeId0": "BD_OwnerOrg",
+ *     "FOwnerId0": { "FNumber": "100" },
+ *     "FCurrId": { "FNumber": "PRE001" },
+ *     "FEntity": [{
+ *       "FSrcEntryId": 100040,
+ *       "FMaterialId": { "FNumber": "801147016108" },
+ *       "FUnitID": { "FNumber": "Pcs" },
+ *       "FMustQty": 10.0,
+ *       "FRealQty": 10.0,
+ *       "FCostRate": 100.0,
+ *       "FBaseUnitId": { "FNumber": "Pcs" },
+ *       "FBaseMustQty": 10.0,
+ *       "FBaseRealQty": 10.0,
+ *       "FOwnerTypeId": "BD_OwnerOrg",
+ *       "FOwnerId": { "FNumber": "100" },
+ *       "FStockId": { "FNumber": "csTest" },
+ *       "FWorkShopId1": { "FNumber": "BM000004" },
+ *       "FMoBillNo": "MO000017",
+ *       "FMoId": 100023,
+ *       "FMoEntryId": 100040,
+ *       "FMoEntrySeq": 1,
+ *       "FStockUnitId": { "FNumber": "Pcs" },
+ *       "FStockRealQty": 10.0,
+ *       "FSrcBillType": "PRD_MO",
+ *       "FSrcInterId": 100023,
+ *       "FSrcBillNo": "MO000017",
+ *       "FBasePrdRealQty": 10.0,
+ *       "FStockStatusId": { "FNumber": "KCZT01_SYS" },
+ *       "FSrcEntrySeq": 1,
+ *       "FMOMAINENTRYID": 100040,
+ *       "FKeeperTypeId": "BD_KeeperOrg",
+ *       "FKeeperId": { "FNumber": "100" },
+ *       "FEntity_Link": [{
+ *         "FEntity_Link_FRuleId": "PRD_MO2INSTOCK",
+ *         "FEntity_Link_FSTableName": "T_PRD_MOENTRY",
+ *         "FEntity_Link_FSBillId": "100023",
+ *         "FEntity_Link_FSId": "100040"
+ *       }]
+ *     }]
+ *   }
+ * }
+ *
  * 需求文档：加工区/飞亚货架对接/需求分析.md
  * 接口文档：加工区/飞亚货架对接/接口文档.md
  */
@@ -140,6 +204,41 @@ namespace kingdee.CustLI.Business.PlugInWebApi
         //    }
         //}
 
+        private (long fid, long fentryId) GetMoIds(string moBillNo)
+        {
+            string url = string.Concat(CloudUrl, "Kingdee.BOS.WebApi.ServicesStub.DynamicFormService.View.common.kdsvc");
+            List<object> parameters = new List<object>();
+            parameters.Add("PRD_MO");
+            parameters.Add(JsonConvert.SerializeObject(new
+            {
+                Number = moBillNo,
+                IsGetBaseDataField = false,
+                IsSortBySeq = false
+            }));
+            string rawResult = HttpPost(url, JsonConvert.SerializeObject(parameters));
+
+            try
+            {
+                JObject result = JObject.Parse(rawResult);
+                JObject bill = result["Result"] as JObject;
+                if (bill == null) return (0, 0);
+
+                long fid = 0;
+                if (bill["Id"] != null) long.TryParse(bill["Id"].ToString(), out fid);
+
+                long fentryId = 0;
+                JArray entity = bill["FEntity"] as JArray;
+                if (entity != null && entity.Count > 0 && entity[0]["FEntryID"] != null)
+                    long.TryParse(entity[0]["FEntryID"].ToString(), out fentryId);
+
+                return (fid, fentryId);
+            }
+            catch
+            {
+                return (0, 0);
+            }
+        }
+
         private string BatchSaveCall(string formId, string content)
         {
             string url = string.Concat(CloudUrl, "Kingdee.BOS.WebApi.ServicesStub.DynamicFormService.BatchSave.common.kdsvc");
@@ -185,13 +284,18 @@ namespace kingdee.CustLI.Business.PlugInWebApi
         {
             JObject batchObj = new JObject();
             batchObj.Add("NeedUpDateFields", new JArray());
+            batchObj.Add("NeedReturnFields", new JArray());
             batchObj.Add("IsDeleteEntry", "true");
             batchObj.Add("SubSystemId", "");
             batchObj.Add("IsVerifyBaseDataField", "false");
             batchObj.Add("IsEntryBatchFill", "true");
             batchObj.Add("ValidateFlag", "true");
             batchObj.Add("NumberSearch", "true");
+            batchObj.Add("IsAutoAdjustField", "false");
             batchObj.Add("InterationFlags", "");
+            batchObj.Add("IgnoreInterationFlag", "");
+            batchObj.Add("IsControlPrecision", "false");
+            batchObj.Add("ValidateRepeatJson", "false");
 
             JArray modelArr = new JArray();
 
@@ -226,25 +330,86 @@ namespace kingdee.CustLI.Business.PlugInWebApi
 
         private JObject BuildPrdInstockModel(JObject item)
         {
+            string moBillNo = item["FSrcBillNo"]?.ToString() ?? "";
+            string materialNumber = item["FMaterialNumber"]?.ToString() ?? "";
+            decimal qty = Convert.ToDecimal(item["FQty"] ?? 0);
+            string stockNumber = item["FStockNumber"]?.ToString() ?? "";
+            string lot = item["FLot"]?.ToString() ?? "";
+
+            var (moFid, moEntryId) = GetMoIds(moBillNo);
+
             JObject model = new JObject();
-            model.Add("FID", 0);
-            model.Add("FBillTypeID", Creat_JsonChildObject("FNUMBER", GetDefaultBillType("PRD_INSTOCK")));
-            model.Add("FStockOrgId", Creat_JsonChildObject("FNumber", GetDefaultOrg()));
-            model.Add("FPrdOrgId", Creat_JsonChildObject("FNumber", GetDefaultOrg()));
-            model.Add("FDate", DateTime.Now.ToString("yyyy-MM-dd"));
+            AddField(model, "FBillType", Creat_JsonChildObject("FNUMBER", "SCRKD02_SYS"));
+            AddField(model, "FDate", DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss"));
+            AddField(model, "FStockOrgId", Creat_JsonChildObject("FNumber", "100"));
+            AddField(model, "FPrdOrgId", Creat_JsonChildObject("FNumber", "100"));
+            AddField(model, "FOwnerTypeId0", "BD_OwnerOrg");
+            AddField(model, "FOwnerId0", Creat_JsonChildObject("FNumber", "100"));
+            AddField(model, "FCurrId", Creat_JsonChildObject("FNumber", "PRE001"));
 
             JArray entryArr = new JArray();
             JObject entry = new JObject();
-            entry.Add("FEntryID", 0);
-            entry.Add("FMaterialId", Creat_JsonChildObject("FNumber", item["FMaterialNumber"] != null ? item["FMaterialNumber"].ToString() : ""));
-            entry.Add("FSrcBillNo", item["FSrcBillNo"] != null ? item["FSrcBillNo"].ToString() : "");
-            entry.Add("FLot", item["FLot"] != null ? item["FLot"].ToString() : "");
-            entry.Add("FQty", Convert.ToDecimal(item["FQty"] ?? 0));
-            entry.Add("FStockId", Creat_JsonChildObject("FNumber", item["FStockNumber"] != null ? item["FStockNumber"].ToString() : ""));
-            entryArr.Add(entry);
+            AddField(entry, "FSrcEntryId", moEntryId);
+            AddField(entry, "FMaterialId", Creat_JsonChildObject("FNumber", materialNumber));
+            AddField(entry, "FUnitID", Creat_JsonChildObject("FNumber", "Pcs"));
+            AddField(entry, "FMustQty", qty);
+            AddField(entry, "FRealQty", qty);
+            AddField(entry, "FCostRate", 100.0);
+            AddField(entry, "FBaseUnitId", Creat_JsonChildObject("FNumber", "Pcs"));
+            AddField(entry, "FBaseMustQty", qty);
+            AddField(entry, "FBaseRealQty", qty);
+            AddField(entry, "FOwnerTypeId", "BD_OwnerOrg");
+            AddField(entry, "FOwnerId", Creat_JsonChildObject("FNumber", "100"));
+            AddField(entry, "FStockId", Creat_JsonChildObject("FNumber", stockNumber));
+            AddField(entry, "FWorkShopId1", Creat_JsonChildObject("FNumber", "BM000004"));
+            AddField(entry, "FMoBillNo", moBillNo);
+            AddField(entry, "FMoId", moFid);
+            AddField(entry, "FMoEntryId", moEntryId);
+            AddField(entry, "FMoEntrySeq", 1);
+            AddField(entry, "FStockUnitId", Creat_JsonChildObject("FNumber", "Pcs"));
+            AddField(entry, "FStockRealQty", qty);
+            AddField(entry, "FSrcBillType", "PRD_MO");
+            AddField(entry, "FSrcInterId", moFid);
+            AddField(entry, "FSrcBillNo", moBillNo);
+            AddField(entry, "FBasePrdRealQty", qty);
+            AddField(entry, "FStockStatusId", Creat_JsonChildObject("FNumber", "KCZT01_SYS"));
+            AddField(entry, "FSrcEntrySeq", 1);
+            AddField(entry, "FMOMAINENTRYID", moEntryId);
+            AddField(entry, "FKeeperTypeId", "BD_KeeperOrg");
+            AddField(entry, "FKeeperId", Creat_JsonChildObject("FNumber", "100"));
+            AddField(entry, "FLot", lot);
 
+            JArray linkArr = new JArray();
+            JObject link = new JObject();
+            link.Add("FEntity_Link_FRuleId", "PRD_MO2INSTOCK");
+            link.Add("FEntity_Link_FSTableName", "T_PRD_MOENTRY");
+            link.Add("FEntity_Link_FSBillId", moFid.ToString());
+            link.Add("FEntity_Link_FSId", moEntryId.ToString());
+            linkArr.Add(link);
+            entry.Add("FEntity_Link", linkArr);
+
+            entryArr.Add(entry);
             model.Add("FEntity", entryArr);
             return model;
+        }
+
+        private void AddField(JObject obj, string key, object value)
+        {
+            if (value == null) return;
+            if (value is string s && string.IsNullOrEmpty(s)) return;
+            if (value is int i && i == 0) return;
+            if (value is long l && l == 0L) return;
+            if (value is decimal d && d == 0m) return;
+            if (value is double db && db == 0.0) return;
+            if (value is bool b && !b) return;
+            obj.Add(key, JToken.FromObject(value));
+        }
+
+        private void AddField(JObject obj, string key, JToken value)
+        {
+            if (value == null) return;
+            if (value.Type == JTokenType.String && string.IsNullOrEmpty(value.ToString())) return;
+            obj.Add(key, value);
         }
 
         private JObject BuildTransferInModel(JObject item)
