@@ -4,7 +4,7 @@
  * ──────────────────────────────────────────
  * 一、业务接口地址（POST，Content-Type: application/json）
  * ──────────────────────────────────────────
- *   http://127.0.0.1/k3cloud/kingdee.CustLI.Business.PlugIn.FeYBatchSave.ExecuteService,kingdee.CustLI.Business.PlugIn.common.kdsvc
+ *   http://127.0.0.1/k3cloud/kingdee.CustLI.Business.PlugInWebApi.FeYBatchSave.ExecuteService,kingdee.CustLI.Business.PlugIn.common.kdsvc
  *
  *   请求体示例（生产入库单 — PRD_INSTOCK）：
  *   {
@@ -63,7 +63,7 @@ using Kingdee.BOS.WebApi.ServicesStub;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 
-namespace kingdee.CustLI.Business.PlugIn
+namespace kingdee.CustLI.Business.PlugInWebApi
 {
     public class FeYBatchSave : AbstractWebApiBusinessService
     {
