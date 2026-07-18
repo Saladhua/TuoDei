@@ -1,12 +1,75 @@
+/**
+ * 飞亚货架对接 — 金蝶 WebAPI 批量保存接口
+ *
+ * ──────────────────────────────────────────
+ * 一、业务接口地址（POST，Content-Type: application/json）
+ * ──────────────────────────────────────────
+ *   http://127.0.0.1/k3cloud/kingdee.CustLI.Business.PlugIn.FeYBatchSave.ExecuteService,kingdee.CustLI.Business.PlugIn.common.kdsvc
+ *
+ *   请求体示例（生产入库单 — PRD_INSTOCK）：
+ *   {
+ *     "UserName": "kd01",
+ *     "Password": "123qwe..",
+ *     "FormId": "PRD_INSTOCK",
+ *     "DataList": [
+ *       {
+ *         "FMaterialNumber": "3.3.2.6.1",
+ *         "FSrcBillNo": "MO2026070001",
+ *         "FLot": "20260701-01",
+ *         "FQty": 100,
+ *         "FStockNumber": "19"
+ *       },
+ *       {
+ *         "FMaterialNumber": "3.3.2.6.1",
+ *         "FSrcBillNo": "MO2026070002",
+ *         "FLot": "20260701-02",
+ *         "FQty": 200,
+ *         "FStockNumber": "20"
+ *       }
+ *     ]
+ *   }
+ *
+ *   说明：
+ *   - DataCenterId（账套ID）已在接口内部写死，外部调用无需传入
+ *   - 本接口内部自动完成登录
+ *   - 既是登录也是保存，外部系统只需 POST 这个地址，传入 UserName + Password 即可
+ *
+ *   如果外部系统需要先单独调用金蝶标准登录接口，地址如下：
+ *   POST http://127.0.0.1/k3cloud/Kingdee.BOS.WebApi.ServicesStub.AuthService.ValidateUser.common.kdsvc
+ *   Body: { "parameters": ["6979e702b71b4c", "kd01", "123qwe..", 2052] }
+ *   返回 LoginResultType=1 表示登录成功
+ *
+ * ──────────────────────────────────────────
+ * 二、支持的单据类型（通过 FormId 区分）
+ * ──────────────────────────────────────────
+ *   PRD_INSTOCK             - 生产入库单（由生产订单汇总生成，只保存不提交/审核）
+ *   STK_TransferDirect_In   - 直接调拨单（入库方向，只保存不提交/审核）
+ *   STK_TransferDirect_Out  - 直接调拨单（出库方向，只保存不提交/审核）
+ *
+ * ──────────────────────────────────────────
+ * 三、业务说明
+ * ──────────────────────────────────────────
+ *   - 所有单据只执行 BatchSave（保存），不提交/不审核
+ *   - 生产入库单通过 FSrcBillNo（生产订单号）与上游生产订单自动关联
+ *   - 仓库编码：19=货架仓，20=中转仓，21=货架出库仓
+ *   - 默认库存组织：100
+ *   - 本接口为自定义二开接口，不做热加载（HotUpdate）
+ *
+ * 需求文档：加工区/飞亚货架对接/需求分析.md
+ * 接口文档：加工区/飞亚货架对接/接口文档.md
+ */
+
 using System;
 using System.Collections.Generic;
+using System.IO;
+using System.Net;
 using System.Text;
+using System.Web;
+using System.Web.Caching;
 using Kingdee.BOS;
-using Kingdee.BOS.Authentication;
 using Kingdee.BOS.Core.DynamicForm;
-using Kingdee.BOS.WebApi.FormService;
-using Kingdee.BOS.WebApi.ServicesStub;
 using Kingdee.BOS.ServiceFacade.KDServiceFx;
+using Kingdee.BOS.WebApi.ServicesStub;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 
@@ -14,113 +77,218 @@ namespace kingdee.CustLI.Business.PlugIn
 {
     public class FeYBatchSave : AbstractWebApiBusinessService
     {
-        public FeYBatchSave(KDServiceContext context) : base(context)
+        private const string DataCenterId = "6979e702b71b4c";
+        private const string CloudUrl = "http://localhost/k3cloud/";
+
+        public FeYBatchSave(KDServiceContext context)
+            : base(context)
         {
         }
 
         public JObject ExecuteService(JObject request)
         {
+            JObject jsonRoot = new JObject();
             try
             {
-                Context ctx = GetContext(request);
-                if (ctx == null)
+                string userName = request["UserName"] != null ? request["UserName"].ToString() : "";
+                string password = request["Password"] != null ? request["Password"].ToString() : "";
+
+                if (!Login(DataCenterId, userName, password))
                 {
-                    return BuildResult(false, "金蝶登录失败，请检查用户名密码", 0, 0, new JArray());
+                    jsonRoot["IsSuccess"] = false;
+                    jsonRoot["DocNo"] = "";
+                    jsonRoot["Error"] = "金蝶登录失败，请检查用户名密码";
+                    return jsonRoot;
                 }
 
-                string formId = request["FormId"]?.ToString();
+                string formId = request["FormId"] != null ? request["FormId"].ToString() : "";
                 JArray dataList = request["DataList"] as JArray;
 
                 if (string.IsNullOrEmpty(formId))
                 {
-                    return BuildResult(false, "FormId 不能为空", 0, 0, new JArray());
+                    jsonRoot["IsSuccess"] = false;
+                    jsonRoot["DocNo"] = "";
+                    jsonRoot["Error"] = "FormId 不能为空";
+                    return jsonRoot;
                 }
+
                 if (dataList == null || dataList.Count == 0)
                 {
-                    return BuildResult(false, "DataList 不能为空", 0, 0, new JArray());
+                    jsonRoot["IsSuccess"] = false;
+                    jsonRoot["DocNo"] = "";
+                    jsonRoot["Error"] = "DataList 不能为空";
+                    return jsonRoot;
                 }
 
                 string batchJson = BuildBatchSaveJson(formId, dataList);
                 if (batchJson == null)
                 {
-                    return BuildResult(false, $"不支持的 FormId: {formId}", 0, 0, new JArray());
+                    jsonRoot["IsSuccess"] = false;
+                    jsonRoot["DocNo"] = "";
+                    jsonRoot["Error"] = "不支持的 FormId: " + formId;
+                    return jsonRoot;
                 }
 
-                object rawResult = WebApiServiceCall.BatchSave(ctx, formId, batchJson);
-                return MapBatchSaveResult(rawResult, dataList.Count);
+                string rawResult = BatchSaveCall(formId, batchJson);
+
+                JObject resultJObject = JObject.Parse(rawResult);
+
+                bool isSuccess = resultJObject["Result"] != null
+                    && resultJObject["Result"]["ResponseStatus"] != null
+                    && resultJObject["Result"]["ResponseStatus"]["IsSuccess"] != null
+                    && resultJObject["Result"]["ResponseStatus"]["IsSuccess"].Value<bool>();
+
+                JArray errors = resultJObject["Result"] != null
+                    && resultJObject["Result"]["ResponseStatus"] != null
+                    && resultJObject["Result"]["ResponseStatus"]["Errors"] != null
+                    ? resultJObject["Result"]["ResponseStatus"]["Errors"] as JArray
+                    : new JArray();
+
+                JArray successEntities = resultJObject["Result"] != null
+                    && resultJObject["Result"]["ResponseStatus"] != null
+                    && resultJObject["Result"]["ResponseStatus"]["SuccessEntities"] != null
+                    ? resultJObject["Result"]["ResponseStatus"]["SuccessEntities"] as JArray
+                    : new JArray();
+
+                int successCount = 0;
+                int failCount = 0;
+                string docNo = "";
+
+                if (successEntities != null && successEntities.Count > 0)
+                {
+                    successCount = successEntities.Count;
+                    if (successEntities[0]["Number"] != null)
+                    {
+                        docNo = successEntities[0]["Number"].ToString();
+                    }
+                }
+
+                if (errors != null)
+                {
+                    failCount = errors.Count;
+                }
+
+                if (isSuccess && failCount == 0)
+                {
+                    jsonRoot["IsSuccess"] = true;
+                    jsonRoot["DocNo"] = docNo;
+                    jsonRoot["Error"] = "";
+                }
+                else
+                {
+                    string errMsg = "";
+                    if (errors != null)
+                    {
+                        foreach (var err in errors)
+                        {
+                            if (err["Message"] != null)
+                            {
+                                errMsg += err["Message"].ToString() + "; ";
+                            }
+                        }
+                    }
+                    jsonRoot["IsSuccess"] = false;
+                    jsonRoot["DocNo"] = docNo;
+                    jsonRoot["Error"] = errMsg;
+                }
+
+                return jsonRoot;
             }
             catch (Exception ex)
             {
-                return BuildResult(false, $"接口异常: {ex.Message}", 0, 0, new JArray());
+                jsonRoot["IsSuccess"] = false;
+                jsonRoot["DocNo"] = "";
+                jsonRoot["Error"] = "接口异常: " + ex.Message;
+                return jsonRoot;
             }
         }
 
-        private Context GetContext(JObject request)
+        private bool Login(string ztid, string userName, string password)
         {
-            Context ctx = KDContext?.Session?.AppContext;
-            if (ctx != null)
+            if (!string.IsNullOrEmpty(HttpRuntime.Cache.Get("LoginCookie") as string))
             {
-                return ctx;
+                return true;
             }
 
-            string userName = request["UserName"]?.ToString();
-            string password = request["Password"]?.ToString();
-            if (!string.IsNullOrEmpty(userName) && !string.IsNullOrEmpty(password))
-            {
-                try
-                {
-                    string dbId = GetDataCenterId();
-                    if (string.IsNullOrEmpty(dbId))
-                    {
-                        return null;
-                    }
-                    var authService = new AuthService(KDContext);
-                    var loginResult = authService.ValidateUser(dbId, userName, password, 2052);
-                    if (loginResult != null && loginResult.LoginResultType == LoginResultType.Success)
-                    {
-                        return loginResult.Context;
-                    }
-                }
-                catch
-                {
-                    return null;
-                }
-            }
-            return null;
-        }
+            string url = string.Concat(CloudUrl, "Kingdee.BOS.WebApi.ServicesStub.AuthService.ValidateUser.common.kdsvc");
+            List<object> Parameters = new List<object>();
+            Parameters.Add(ztid);
+            Parameters.Add(userName);
+            Parameters.Add(password);
+            Parameters.Add(2052);
+            string content = JsonConvert.SerializeObject(Parameters);
 
-        private string GetDataCenterId()
-        {
             try
             {
-                var webCtx = KDContext?.WebContext?.Context;
-                if (webCtx != null)
+                string result = HttpPost(url, content);
+                var iResult = JObject.Parse(result)["LoginResultType"].Value<int>();
+
+                if (iResult == 1 || iResult == -5)
                 {
-                    object dbId = webCtx.Items["dataCenterId"];
-                    if (dbId != null)
-                    {
-                        return dbId.ToString();
-                    }
+                    HttpRuntime.Cache.Insert("LoginCookie", "1", null, DateTime.Now.AddMinutes(10), Cache.NoSlidingExpiration);
+                    return true;
                 }
-                return null;
+
+                return false;
             }
-            catch
+            catch (Exception e)
             {
-                return null;
+                throw new Exception(e.ToString());
+            }
+        }
+
+        private string BatchSaveCall(string formId, string content)
+        {
+            string url = string.Concat(CloudUrl, "Kingdee.BOS.WebApi.ServicesStub.DynamicFormService.BatchSave.common.kdsvc");
+            List<object> Parameters = new List<object>();
+            Parameters.Add(formId);
+            Parameters.Add(content);
+            return HttpPost(url, JsonConvert.SerializeObject(Parameters));
+        }
+
+        private string HttpPost(string url, string parametersJson)
+        {
+            HttpWebRequest httpRequest = (HttpWebRequest)WebRequest.Create(url);
+            httpRequest.Method = "POST";
+            httpRequest.ContentType = "application/json";
+            httpRequest.Timeout = 1000 * 60 * 10;
+
+            JObject jObj = new JObject();
+            jObj.Add("format", 1);
+            jObj.Add("useragent", "ApiClient");
+            jObj.Add("rid", Guid.NewGuid().ToString().GetHashCode().ToString());
+            jObj.Add("parameters", parametersJson);
+            jObj.Add("timestamp", DateTime.Now);
+            jObj.Add("v", "1.0");
+            string sContent = jObj.ToString();
+
+            byte[] bytes = Encoding.UTF8.GetBytes(sContent);
+            using (Stream reqStream = httpRequest.GetRequestStream())
+            {
+                reqStream.Write(bytes, 0, bytes.Length);
+                reqStream.Flush();
+            }
+
+            using (var repStream = httpRequest.GetResponse().GetResponseStream())
+            {
+                using (var reader = new StreamReader(repStream))
+                {
+                    return reader.ReadToEnd();
+                }
             }
         }
 
         private string BuildBatchSaveJson(string formId, JArray dataList)
         {
             JObject batchObj = new JObject();
-            batchObj["NeedUpDateFields"] = new JArray();
-            batchObj["IsDeleteEntry"] = "true";
-            batchObj["SubSystemId"] = "";
-            batchObj["IsVerifyBaseDataField"] = "false";
-            batchObj["IsEntryBatchFill"] = "true";
-            batchObj["ValidateFlag"] = "true";
-            batchObj["NumberSearch"] = "true";
-            batchObj["InterationFlags"] = "";
+            batchObj.Add("NeedUpDateFields", new JArray());
+            batchObj.Add("IsDeleteEntry", "true");
+            batchObj.Add("SubSystemId", "");
+            batchObj.Add("IsVerifyBaseDataField", "false");
+            batchObj.Add("IsEntryBatchFill", "true");
+            batchObj.Add("ValidateFlag", "true");
+            batchObj.Add("NumberSearch", "true");
+            batchObj.Add("InterationFlags", "");
 
             JArray modelArr = new JArray();
 
@@ -148,77 +316,77 @@ namespace kingdee.CustLI.Business.PlugIn
                     return null;
             }
 
-            batchObj["Model"] = modelArr;
-            batchObj["BatchCount"] = Math.Min(dataList.Count, 5);
+            batchObj.Add("Model", modelArr);
+            batchObj.Add("BatchCount", Math.Min(dataList.Count, 5));
             return JsonConvert.SerializeObject(batchObj);
         }
 
         private JObject BuildPrdInstockModel(JObject item)
         {
             JObject model = new JObject();
-            model["FID"] = 0;
-            model["FBillTypeID"] = new JObject { ["FNUMBER"] = GetDefaultBillType("PRD_INSTOCK") };
-            model["FStockOrgId"] = new JObject { ["FNumber"] = GetDefaultOrg() };
-            model["FPrdOrgId"] = new JObject { ["FNumber"] = GetDefaultOrg() };
-            model["FDate"] = DateTime.Now.ToString("yyyy-MM-dd");
+            model.Add("FID", 0);
+            model.Add("FBillTypeID", Creat_JsonChildObject("FNUMBER", GetDefaultBillType("PRD_INSTOCK")));
+            model.Add("FStockOrgId", Creat_JsonChildObject("FNumber", GetDefaultOrg()));
+            model.Add("FPrdOrgId", Creat_JsonChildObject("FNumber", GetDefaultOrg()));
+            model.Add("FDate", DateTime.Now.ToString("yyyy-MM-dd"));
 
             JArray entryArr = new JArray();
             JObject entry = new JObject();
-            entry["FEntryID"] = 0;
-            entry["FMaterialId"] = new JObject { ["FNumber"] = item["FMaterialNumber"]?.ToString() };
-            entry["FSrcBillNo"] = item["FSrcBillNo"]?.ToString();
-            entry["FLot"] = item["FLot"]?.ToString();
-            entry["FQty"] = Convert.ToDecimal(item["FQty"] ?? 0);
-            entry["FStockId"] = new JObject { ["FNumber"] = item["FStockNumber"]?.ToString() };
+            entry.Add("FEntryID", 0);
+            entry.Add("FMaterialId", Creat_JsonChildObject("FNumber", item["FMaterialNumber"] != null ? item["FMaterialNumber"].ToString() : ""));
+            entry.Add("FSrcBillNo", item["FSrcBillNo"] != null ? item["FSrcBillNo"].ToString() : "");
+            entry.Add("FLot", item["FLot"] != null ? item["FLot"].ToString() : "");
+            entry.Add("FQty", Convert.ToDecimal(item["FQty"] ?? 0));
+            entry.Add("FStockId", Creat_JsonChildObject("FNumber", item["FStockNumber"] != null ? item["FStockNumber"].ToString() : ""));
             entryArr.Add(entry);
 
-            model["FEntity"] = entryArr;
+            model.Add("FEntity", entryArr);
             return model;
         }
 
         private JObject BuildTransferInModel(JObject item)
         {
             JObject model = new JObject();
-            model["FID"] = 0;
-            model["FBillTypeID"] = new JObject { ["FNUMBER"] = GetDefaultBillType("STK_TransferDirect") };
-            model["FStockOrgId"] = new JObject { ["FNumber"] = GetDefaultOrg() };
-            model["FTransferDirect"] = "1";
-            model["FDate"] = DateTime.Now.ToString("yyyy-MM-dd");
+            model.Add("FID", 0);
+            model.Add("FBillTypeID", Creat_JsonChildObject("FNUMBER", GetDefaultBillType("STK_TransferDirect")));
+            model.Add("FStockOrgId", Creat_JsonChildObject("FNumber", GetDefaultOrg()));
+            model.Add("FTransferDirect", "1");
+            model.Add("FDate", DateTime.Now.ToString("yyyy-MM-dd"));
 
             JArray entryArr = new JArray();
             JObject entry = new JObject();
-            entry["FEntryID"] = 0;
-            entry["FMaterialId"] = new JObject { ["FNumber"] = item["FMaterialNumber"]?.ToString() };
-            entry["FSrcStockId"] = new JObject { ["FNumber"] = item["FSrcStockNumber"]?.ToString() };
-            entry["FDestStockId"] = new JObject { ["FNumber"] = item["FDestStockNumber"]?.ToString() };
-            entry["FLot"] = item["FLot"]?.ToString();
-            entry["FQty"] = Convert.ToDecimal(item["FQty"] ?? 0);
+            entry.Add("FEntryID", 0);
+            entry.Add("FMaterialId", Creat_JsonChildObject("FNumber", item["FMaterialNumber"] != null ? item["FMaterialNumber"].ToString() : ""));
+            entry.Add("FSrcStockId", Creat_JsonChildObject("FNumber", item["FSrcStockNumber"] != null ? item["FSrcStockNumber"].ToString() : ""));
+            entry.Add("FDestStockId", Creat_JsonChildObject("FNumber", item["FDestStockNumber"] != null ? item["FDestStockNumber"].ToString() : ""));
+            entry.Add("FLot", item["FLot"] != null ? item["FLot"].ToString() : "");
+            entry.Add("FQty", Convert.ToDecimal(item["FQty"] ?? 0));
             entryArr.Add(entry);
 
-            model["FEntity"] = entryArr;
+            model.Add("FEntity", entryArr);
             return model;
         }
 
         private JObject BuildTransferOutModel(JObject item)
         {
             JObject model = new JObject();
-            model["FID"] = 0;
-            model["FBillTypeID"] = new JObject { ["FNUMBER"] = GetDefaultBillType("STK_TransferDirect") };
-            model["FStockOrgId"] = new JObject { ["FNumber"] = GetDefaultOrg() };
-            model["FTransferDirect"] = "2";
-            model["FDate"] = DateTime.Now.ToString("yyyy-MM-dd");
+            model.Add("FID", 0);
+            model.Add("FBillTypeID", Creat_JsonChildObject("FNUMBER", GetDefaultBillType("STK_TransferDirect")));
+            model.Add("FStockOrgId", Creat_JsonChildObject("FNumber", GetDefaultOrg()));
+            model.Add("FTransferDirect", "2");
+            model.Add("FDate", DateTime.Now.ToString("yyyy-MM-dd"));
 
             JArray entryArr = new JArray();
             JObject entry = new JObject();
-            entry["FEntryID"] = 0;
-            entry["FMaterialId"] = new JObject { ["FNumber"] = item["FMaterialNumber"]?.ToString() };
-            entry["FSrcStockId"] = new JObject { ["FNumber"] = item["FSrcStockNumber"]?.ToString() };
-            entry["FDestStockId"] = new JObject { ["FNumber"] = "21" };
-            entry["FLot"] = item["FLot"]?.ToString();
-            entry["FQty"] = Convert.ToDecimal(item["FQty"] ?? 0);
+            entry.Add("FEntryID", 0);
+            entry.Add("FMaterialId", Creat_JsonChildObject("FNumber", item["FMaterialNumber"] != null ? item["FMaterialNumber"].ToString() : ""));
+            entry.Add("FSrcStockId", Creat_JsonChildObject("FNumber", item["FSrcStockNumber"] != null ? item["FSrcStockNumber"].ToString() : ""));
+            entry.Add("FDestStockId", Creat_JsonChildObject("FNumber", "21"));
+            entry.Add("FLot", item["FLot"] != null ? item["FLot"].ToString() : "");
+            entry.Add("FQty", Convert.ToDecimal(item["FQty"] ?? 0));
             entryArr.Add(entry);
 
-            model["FEntity"] = entryArr;
+            model.Add("FEntity", entryArr);
             return model;
         }
 
@@ -240,107 +408,11 @@ namespace kingdee.CustLI.Business.PlugIn
             }
         }
 
-        private JObject MapBatchSaveResult(object rawResult, int totalCount)
+        private JObject Creat_JsonChildObject(string fckey, string fcval)
         {
-            JObject result = BuildResult(true, "操作完成", totalCount, 0, new JArray());
-
-            try
-            {
-                string jsonStr = JsonConvert.SerializeObject(rawResult);
-                JObject rawJson = JObject.Parse(jsonStr);
-                JObject responseStatus = rawJson["Result"]?["ResponseStatus"] as JObject;
-                if (responseStatus == null)
-                {
-                    responseStatus = rawJson["ResponseStatus"] as JObject;
-                }
-
-                JArray details = new JArray();
-                int successCount = 0;
-                int failCount = 0;
-
-                JArray successEntities = responseStatus?["SuccessEntities"] as JArray;
-                JArray errors = responseStatus?["Errors"] as JArray;
-
-                int maxItems = Math.Max(
-                    successEntities?.Count ?? 0,
-                    errors?.Count ?? 0
-                );
-                maxItems = Math.Max(maxItems, totalCount);
-
-                for (int i = 0; i < maxItems; i++)
-                {
-                    JObject detail = new JObject();
-                    detail["Index"] = i;
-                    detail["Success"] = false;
-                    detail["BillNo"] = "";
-                    detail["Id"] = "";
-                    detail["Message"] = "";
-
-                    bool foundSuccess = false;
-                    if (successEntities != null)
-                    {
-                        foreach (var se in successEntities)
-                        {
-                            if (se["DIndex"] != null && Convert.ToInt32(se["DIndex"]) == i)
-                            {
-                                detail["Success"] = true;
-                                detail["BillNo"] = se["Number"]?.ToString() ?? "";
-                                detail["Id"] = se["Id"]?.ToString() ?? "";
-                                foundSuccess = true;
-                                break;
-                            }
-                        }
-                    }
-
-                    if (!foundSuccess && errors != null)
-                    {
-                        foreach (var err in errors)
-                        {
-                            if (err["DIndex"] != null && Convert.ToInt32(err["DIndex"]) == i)
-                            {
-                                detail["Success"] = false;
-                                detail["Message"] = err["Message"]?.ToString() ?? "";
-                                break;
-                            }
-                        }
-                    }
-
-                    details.Add(detail);
-
-                    if (detail["Success"]?.Value<bool>() == true)
-                    {
-                        successCount++;
-                    }
-                    else if (!string.IsNullOrEmpty(detail["Message"]?.ToString()))
-                    {
-                        failCount++;
-                    }
-                }
-
-                result["Message"] = $"操作完成，成功{successCount}条，失败{failCount}条";
-                result["Data"]["SuccessCount"] = successCount;
-                result["Data"]["FailCount"] = failCount;
-                result["Data"]["Details"] = details;
-                result["Success"] = failCount == 0;
-            }
-            catch
-            {
-                result["Data"]["Details"] = new JArray();
-            }
-
-            return result;
-        }
-
-        private JObject BuildResult(bool success, string message, int successCount, int failCount, JArray details)
-        {
-            JObject result = new JObject();
-            result["Success"] = success;
-            result["Message"] = message;
-            result["Data"] = new JObject();
-            result["Data"]["SuccessCount"] = successCount;
-            result["Data"]["FailCount"] = failCount;
-            result["Data"]["Details"] = details;
-            return result;
+            JObject cjitem = new JObject();
+            cjitem.Add(fckey, fcval);
+            return cjitem;
         }
     }
 }
