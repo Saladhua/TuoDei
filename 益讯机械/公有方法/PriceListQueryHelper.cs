@@ -28,6 +28,15 @@ namespace kingdee.CustLI.Business.PlugIn
             public bool IncludedTax;  // 是否含税（对应价目表字段 FIsIncludedTax）
         }
 
+        /// <summary>
+        /// 取价结果：同时包含含税价和不含税价，由调用方决定取哪个
+        /// </summary>
+        public class PriceBothResult
+        {
+            public decimal? TaxPrice { get; set; }  // 含税单价 (FTAXPRICE)
+            public decimal? Price { get; set; }      // 单价 (FPRICE)
+        }
+
         #endregion
 
         #region 对外方法
@@ -315,6 +324,126 @@ namespace kingdee.CustLI.Business.PlugIn
 
         #endregion
 
+        #region 不区分是否含税的取价方法
+
+        /// <summary>
+        /// 按 (供应商,物料,价格类型) 维度取最新价目表记录，不区分是否含税。
+        /// 返回含税价(FTAXPRICE)和不含税价(FPRICE)，由调用方根据单据的 ISTAX 决定取哪个。
+        /// </summary>
+        public static Dictionary<string, PriceBothResult> GetLatestPriceEntryWithType(Context ctx, List<PriceReq> reqs)
+        {
+            var result = new Dictionary<string, PriceBothResult>();
+            if (reqs == null || reqs.Count == 0) return result;
+
+            var suppliers = new HashSet<long>();
+            var materials = new HashSet<long>();
+            var priceTypes = new HashSet<int>();
+
+            foreach (var r in reqs)
+            {
+                suppliers.Add(r.SupplierId);
+                materials.Add(r.MaterialId);
+                priceTypes.Add(r.PriceType);
+            }
+
+            string sql = string.Format(@"
+                SELECT a.FMATERIALID     AS FMATERIALID,
+                       b.FSUPPLIERID     AS FSUPPLIERID,
+                       b.FPriceType      AS FPRICETYPE,
+                       a.FTAXPRICE       AS FTAXPRICE,
+                       a.FPRICE          AS FPRICE,
+                       a.FEFFECTIVEDATE  AS FEFFECTIVEDATE
+                FROM t_PUR_PriceListEntry a
+                INNER JOIN t_PUR_PriceList b ON a.FID = b.FID
+                WHERE a.FMATERIALID    IN ({0})
+                  AND b.FSUPPLIERID    IN ({1})
+                  AND b.FPriceType     IN ({2})
+                  AND a.FDISABLESTATUS <> 'A'
+                ORDER BY a.FEFFECTIVEDATE DESC
+                ",
+                string.Join(",", materials),
+                string.Join(",", suppliers),
+                string.Join(",", priceTypes));
+
+            DataSet ds = DBServiceHelper.ExecuteDataSet(ctx, sql);
+            if (ds == null || ds.Tables.Count == 0 || ds.Tables[0].Rows.Count == 0)
+                return result;
+
+            foreach (DataRow row in ds.Tables[0].Rows)
+            {
+                long mat = Convert.ToInt64(row["FMATERIALID"]);
+                long sup = Convert.ToInt64(row["FSUPPLIERID"]);
+                int pt = Convert.ToInt32(row["FPRICETYPE"]);
+                decimal? taxPrice = (row["FTAXPRICE"] == DBNull.Value) ? null : (decimal?)Convert.ToDecimal(row["FTAXPRICE"]);
+                decimal? price = (row["FPRICE"] == DBNull.Value) ? null : (decimal?)Convert.ToDecimal(row["FPRICE"]);
+
+                string key = BuildKeyNoTax(sup, mat, pt);
+                if (!result.ContainsKey(key))
+                {
+                    result[key] = new PriceBothResult { TaxPrice = taxPrice, Price = price };
+                }
+            }
+
+            return result;
+        }
+
+        /// <summary>
+        /// 按 (供应商,物料) 维度取最新价目表记录，不区分价格类型和是否含税。
+        /// 无源单信息时的兜底取价。
+        /// </summary>
+        public static Dictionary<string, PriceBothResult> GetLatestPriceEntryAnyType(Context ctx, List<PriceReq> reqs)
+        {
+            var result = new Dictionary<string, PriceBothResult>();
+            if (reqs == null || reqs.Count == 0) return result;
+
+            var suppliers = new HashSet<long>();
+            var materials = new HashSet<long>();
+
+            foreach (var r in reqs)
+            {
+                suppliers.Add(r.SupplierId);
+                materials.Add(r.MaterialId);
+            }
+
+            string sql = string.Format(@"
+                SELECT a.FMATERIALID     AS FMATERIALID,
+                       b.FSUPPLIERID     AS FSUPPLIERID,
+                       a.FTAXPRICE       AS FTAXPRICE,
+                       a.FPRICE          AS FPRICE,
+                       a.FEFFECTIVEDATE  AS FEFFECTIVEDATE
+                FROM t_PUR_PriceListEntry a
+                INNER JOIN t_PUR_PriceList b ON a.FID = b.FID
+                WHERE a.FMATERIALID    IN ({0})
+                  AND b.FSUPPLIERID    IN ({1})
+                  AND a.FDISABLESTATUS <> 'A'
+                ORDER BY a.FEFFECTIVEDATE DESC
+                ",
+                string.Join(",", materials),
+                string.Join(",", suppliers));
+
+            DataSet ds = DBServiceHelper.ExecuteDataSet(ctx, sql);
+            if (ds == null || ds.Tables.Count == 0 || ds.Tables[0].Rows.Count == 0)
+                return result;
+
+            foreach (DataRow row in ds.Tables[0].Rows)
+            {
+                long mat = Convert.ToInt64(row["FMATERIALID"]);
+                long sup = Convert.ToInt64(row["FSUPPLIERID"]);
+                decimal? taxPrice = (row["FTAXPRICE"] == DBNull.Value) ? null : (decimal?)Convert.ToDecimal(row["FTAXPRICE"]);
+                decimal? price = (row["FPRICE"] == DBNull.Value) ? null : (decimal?)Convert.ToDecimal(row["FPRICE"]);
+
+                string key = BuildKeyNoTypeNoTax(sup, mat);
+                if (!result.ContainsKey(key))
+                {
+                    result[key] = new PriceBothResult { TaxPrice = taxPrice, Price = price };
+                }
+            }
+
+            return result;
+        }
+
+        #endregion
+
         #region 内部工具
 
         /// <summary>
@@ -339,6 +468,22 @@ namespace kingdee.CustLI.Business.PlugIn
         public static string BuildKeyNoType(long sup, long mat, int tax)
         {
             return string.Format("{0}_{1}_{2}", sup, mat, tax);
+        }
+
+        /// <summary>
+        /// 不区分是否含税的 key（保留价格类型）：sup_mat_pt
+        /// </summary>
+        public static string BuildKeyNoTax(long sup, long mat, int pt)
+        {
+            return string.Format("{0}_{1}_{2}", sup, mat, pt);
+        }
+
+        /// <summary>
+        /// 不区分是否含税和价格类型的 key：sup_mat
+        /// </summary>
+        public static string BuildKeyNoTypeNoTax(long sup, long mat)
+        {
+            return string.Format("{0}_{1}", sup, mat);
         }
 
         #endregion

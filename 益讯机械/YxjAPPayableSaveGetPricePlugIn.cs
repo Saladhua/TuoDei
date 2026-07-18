@@ -162,7 +162,7 @@ namespace kingdee.CustLI.Business.PlugIn
                         resolvedRefs.Add(r);
                 }
 
-                // 已追溯行：按价格类型取价
+                // 已追溯行：按价格类型取价，不区分是否含税
                 if (resolvedRefs.Count > 0)
                 {
                     var resolvedBillNos = new List<string>();
@@ -184,25 +184,22 @@ namespace kingdee.CustLI.Business.PlugIn
                         });
                     }
 
-                    Dictionary<string, decimal?> priceMap = PriceListQueryHelper.GetLatestTaxPrice(this.Context, reqs);
+                    Dictionary<string, PriceListQueryHelper.PriceBothResult> priceMap =
+                        PriceListQueryHelper.GetLatestPriceEntryWithType(this.Context, reqs);
                     foreach (var r in resolvedRefs)
                     {
-                        var req = new PriceListQueryHelper.PriceReq
+                        string key = PriceListQueryHelper.BuildKeyNoTax(
+                            r.SupplierId, r.MaterialId, r.PriceType);
+                        if (priceMap.TryGetValue(key, out PriceListQueryHelper.PriceBothResult entryResult))
                         {
-                            SupplierId = r.SupplierId,
-                            MaterialId = r.MaterialId,
-                            PriceType = r.PriceType,
-                            IncludedTax = r.IncludedTax
-                        };
-
-                        if (priceMap.TryGetValue(PriceListQueryHelper.BuildKey(req), out decimal? price) && price.HasValue)
-                        {
-                            r.Entry["F_CustLi_PriceListTaxPrice"] = price.Value;
+                            r.Entry["F_CustLi_PriceListTaxPrice"] = r.IncludedTax
+                                ? (entryResult.TaxPrice ?? entryResult.Price ?? 0m)
+                                : (entryResult.Price ?? entryResult.TaxPrice ?? 0m);
                         }
                     }
                 }
 
-                // 未追溯行（无源单信息）：按供应商+物料取最新价格（不区分价格类型）
+                // 未追溯行（无源单信息）：按供应商+物料取最新价格（不区分价格类型和是否含税）
                 if (unresolvedRefs.Count > 0)
                 {
                     var reqs = new List<PriceListQueryHelper.PriceReq>();
@@ -217,14 +214,17 @@ namespace kingdee.CustLI.Business.PlugIn
                         });
                     }
 
-                    Dictionary<string, decimal?> priceMap = PriceListQueryHelper.GetLatestTaxPriceAnyType(this.Context, reqs);
+                    Dictionary<string, PriceListQueryHelper.PriceBothResult> priceMap =
+                        PriceListQueryHelper.GetLatestPriceEntryAnyType(this.Context, reqs);
                     foreach (var r in unresolvedRefs)
                     {
-                        string anyKey = PriceListQueryHelper.BuildKeyNoType(
-                            r.SupplierId, r.MaterialId, r.IncludedTax ? 1 : 0);
-                        if (priceMap.TryGetValue(anyKey, out decimal? price) && price.HasValue)
+                        string key = PriceListQueryHelper.BuildKeyNoTypeNoTax(
+                            r.SupplierId, r.MaterialId);
+                        if (priceMap.TryGetValue(key, out PriceListQueryHelper.PriceBothResult entryResult))
                         {
-                            r.Entry["F_CustLi_PriceListTaxPrice"] = price.Value;
+                            r.Entry["F_CustLi_PriceListTaxPrice"] = r.IncludedTax
+                                ? (entryResult.TaxPrice ?? entryResult.Price ?? 0m)
+                                : (entryResult.Price ?? entryResult.TaxPrice ?? 0m);
                         }
                     }
                 }

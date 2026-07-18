@@ -36,7 +36,7 @@ namespace kingdee.CustLI.Business.PlugIn
             base.OnPreparePropertys(e);
 
             e.FieldKeys.Add("FSETACCOUNTTYPE");            // 立账类型：区分暂估/财务
-            e.FieldKeys.Add("ISTAX");                     // 是否含税（表头）
+            e.FieldKeys.Add("FISTAX");                     // 是否含税（表头）
             e.FieldKeys.Add("AP_PAYABLEENTRY");           // 单据体
             e.FieldKeys.Add("FTAXPRICE");                 // 发票含税单价
             e.FieldKeys.Add("FPrice");                    // 发票单价（不含税）
