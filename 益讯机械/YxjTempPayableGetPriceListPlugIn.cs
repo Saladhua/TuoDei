@@ -273,6 +273,18 @@ namespace kingdee.CustLI.Business.PlugIn
                 sb.Append("FTAXAMOUNTFOR = CASE FENTRYID ");
                 foreach (var kv in entryUpdates)
                     sb.AppendFormat("WHEN {0} THEN {1} ", kv.Key, kv.Value.taxAmt);
+                sb.Append("END, ");
+                sb.Append("ALLAMOUNT = CASE FENTRYID ");
+                foreach (var kv in entryUpdates)
+                    sb.AppendFormat("WHEN {0} THEN {1} ", kv.Key, kv.Value.allAmt);
+                sb.Append("END, ");
+                sb.Append("FTAXAMOUNT_D = CASE FENTRYID ");
+                foreach (var kv in entryUpdates)
+                    sb.AppendFormat("WHEN {0} THEN {1} ", kv.Key, kv.Value.taxAmt);
+                sb.Append("END, ");
+                sb.Append("NOTAXAMOUNT = CASE FENTRYID ");
+                foreach (var kv in entryUpdates)
+                    sb.AppendFormat("WHEN {0} THEN {1} ", kv.Key, kv.Value.noTaxAmt);
                 sb.Append("END ");
                 sb.AppendFormat("WHERE FENTRYID IN ({0}) AND FID IN ({1});", entryIdList, billIdList);
 
