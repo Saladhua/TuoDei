@@ -142,7 +142,7 @@ namespace kingdee.CustLI.Business.PlugIn
                 if (!priceMap.TryGetValue(key, out decimal? priceValue) || !priceValue.HasValue)
                     continue;
 
-                decimal qty = Convert.ToDecimal(r.Entry["FQty"] ?? 0m);
+                decimal qty = Convert.ToDecimal(r.Entry["FPRICEQTY"] ?? 0m);
                 if (qty == 0m)
                     continue;
 
