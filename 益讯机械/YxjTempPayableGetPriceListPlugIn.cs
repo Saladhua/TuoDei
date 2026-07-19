@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Linq;
+using System.Text;
 using Kingdee.BOS;
 using Kingdee.BOS.Core.DynamicForm;
 using Kingdee.BOS.Core.DynamicForm.PlugIn;
@@ -134,6 +135,10 @@ namespace kingdee.CustLI.Business.PlugIn
                 PriceListQueryHelper.GetLatestTaxPrice(this.Context, reqs);
 
             int filledCount = 0;
+            var entryUpdates = new Dictionary<long, (string taxPrice, string price, string allAmt, string noTaxAmt, string taxAmt)>();
+            var headerTotals = new Dictionary<long, decimal>();
+            var billIdMap = new Dictionary<DynamicObject, long>();
+
             foreach (var r in refs)
             {
                 string key = PriceListQueryHelper.BuildKey(
@@ -175,9 +180,31 @@ namespace kingdee.CustLI.Business.PlugIn
 
                 decimal entryTaxPrice = Convert.ToDecimal(r.Entry["TaxPrice"]);
                 decimal entryPrice = Convert.ToDecimal(r.Entry["FPrice"]);
-                r.Entry["FALLAMOUNTFOR_D"] = Math.Round(qty * entryTaxPrice, 6);
-                r.Entry["FTAXAMOUNTFOR_D"] = Math.Round(qty * (entryTaxPrice - entryPrice), 6);
+                decimal allAmt = Math.Round(qty * entryTaxPrice, 6);
+                decimal noTaxAmt = Math.Round(qty * entryPrice, 6);
+                decimal taxAmt = Math.Round(allAmt - noTaxAmt, 6);
 
+                r.Entry["FALLAMOUNTFOR_D"] = allAmt;
+                r.Entry["FNoTaxAmountFor_D"] = noTaxAmt;
+                r.Entry["NOTAXAMOUNT"] = noTaxAmt;
+                r.Entry["FTAXAMOUNTFOR_D"] = taxAmt;
+
+                long entryId = Convert.ToInt64(r.Entry["Id"]);
+                long billId = Convert.ToInt64(r.Bill["Id"]);
+
+                entryUpdates[entryId] = (
+                    entryTaxPrice.ToString("F6", System.Globalization.CultureInfo.InvariantCulture),
+                    entryPrice.ToString("F6", System.Globalization.CultureInfo.InvariantCulture),
+                    allAmt.ToString("F2", System.Globalization.CultureInfo.InvariantCulture),
+                    noTaxAmt.ToString("F2", System.Globalization.CultureInfo.InvariantCulture),
+                    taxAmt.ToString("F2", System.Globalization.CultureInfo.InvariantCulture));
+
+                if (headerTotals.ContainsKey(billId))
+                    headerTotals[billId] += allAmt;
+                else
+                    headerTotals[billId] = allAmt;
+
+                billIdMap[r.Bill] = billId;
                 changedBills.Add(r.Bill);
                 filledCount++;
             }
@@ -218,6 +245,69 @@ namespace kingdee.CustLI.Business.PlugIn
 
             if (saveResult.IsSuccess)
             {
+                if (entryUpdates.Count > 0)
+                {
+                    var sb = new StringBuilder();
+
+                    string entryIdList = string.Join(",", entryUpdates.Keys);
+                    string billIdList = string.Join(",", headerTotals.Keys);
+
+                    sb.Append("UPDATE T_AP_PAYABLEENTRY SET ");
+                    sb.Append("FTAXPRICE = CASE FENTRYID ");
+                    foreach (var kv in entryUpdates)
+                        sb.AppendFormat("WHEN {0} THEN {1} ", kv.Key, kv.Value.taxPrice);
+                    sb.Append("END, ");
+                    sb.Append("FPrice = CASE FENTRYID ");
+                    foreach (var kv in entryUpdates)
+                        sb.AppendFormat("WHEN {0} THEN {1} ", kv.Key, kv.Value.price);
+                    sb.Append("END, ");
+                    sb.Append("FALLAMOUNTFOR = CASE FENTRYID ");
+                    foreach (var kv in entryUpdates)
+                        sb.AppendFormat("WHEN {0} THEN {1} ", kv.Key, kv.Value.allAmt);
+                    sb.Append("END, ");
+                    sb.Append("FNoTaxAmountFor = CASE FENTRYID ");
+                    foreach (var kv in entryUpdates)
+                        sb.AppendFormat("WHEN {0} THEN {1} ", kv.Key, kv.Value.noTaxAmt);
+                    sb.Append("END, ");
+                    sb.Append("FTAXAMOUNTFOR = CASE FENTRYID ");
+                    foreach (var kv in entryUpdates)
+                        sb.AppendFormat("WHEN {0} THEN {1} ", kv.Key, kv.Value.taxAmt);
+                    sb.Append("END, ");
+                    sb.Append("FALLAMOUNT = CASE FENTRYID ");
+                    foreach (var kv in entryUpdates)
+                        sb.AppendFormat("WHEN {0} THEN {1} ", kv.Key, kv.Value.allAmt);
+                    sb.Append("END, ");
+                    sb.Append("FNOTAXAMOUNT = CASE FENTRYID ");
+                    foreach (var kv in entryUpdates)
+                        sb.AppendFormat("WHEN {0} THEN {1} ", kv.Key, kv.Value.noTaxAmt);
+                    sb.Append("END, ");
+                    sb.Append("FTAXAMOUNT = CASE FENTRYID ");
+                    foreach (var kv in entryUpdates)
+                        sb.AppendFormat("WHEN {0} THEN {1} ", kv.Key, kv.Value.taxAmt);
+                    sb.Append("END ");
+                    sb.AppendFormat("WHERE FENTRYID IN ({0}) AND FID IN ({1});", entryIdList, billIdList);
+
+                    sb.Append("UPDATE T_AP_PAYABLE SET ");
+                    sb.Append("FALLAMOUNTFOR = CASE FID ");
+                    foreach (var kv in headerTotals)
+                        sb.AppendFormat("WHEN {0} THEN {1} ", kv.Key, kv.Value.ToString("F2", System.Globalization.CultureInfo.InvariantCulture));
+                    sb.Append("END ");
+                    sb.AppendFormat("WHERE FID IN ({0});", billIdList);
+
+                    sb.Append("UPDATE T_AP_PAYABLEPLAN SET ");
+                    sb.Append("FPAYAMOUNTFOR = CASE FID ");
+                    foreach (var kv in headerTotals)
+                        sb.AppendFormat("WHEN {0} THEN {1} ", kv.Key, kv.Value.ToString("F2", System.Globalization.CultureInfo.InvariantCulture));
+                    sb.Append("END, ");
+                    sb.Append("FPAYAMOUNT = CASE FID ");
+                    foreach (var kv in headerTotals)
+                        sb.AppendFormat("WHEN {0} THEN {1} ", kv.Key, kv.Value.ToString("F2", System.Globalization.CultureInfo.InvariantCulture));
+                    sb.Append("END ");
+                    sb.AppendFormat("WHERE FID IN ({0});", billIdList);
+
+                    DBServiceHelper.ExecuteDataSet(this.Context, sb.ToString());
+                }
+
                 this.View.Refresh();
                 this.View.ShowMessage(string.Format("已成功为 {0} 行获取价目表价格并保存。", filledCount));
             }

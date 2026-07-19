@@ -1,0 +1,308 @@
+﻿using System;
+using System.Collections.Generic;
+using System.ComponentModel;
+using System.Linq;
+using Kingdee.BOS;
+using Kingdee.BOS.Core.DynamicForm;
+using Kingdee.BOS.Core.DynamicForm.PlugIn;
+using Kingdee.BOS.Core.DynamicForm.PlugIn.Args;
+using Kingdee.BOS.Core.List.PlugIn;
+using Kingdee.BOS.Orm.DataEntity;
+using Kingdee.BOS.ServiceHelper;
+using Kingdee.BOS.Core.Metadata;
+using Kingdee.BOS.Util;
+using System.Text;
+using System.Globalization;
+
+namespace kingdee.CustLI.Business.PlugIn
+{
+    /// <summary>
+    /// 鏆備及搴斾粯鍗?- 鍒楄〃"鑾峰彇浠风洰琛ㄤ环鏍?鎸夐挳鎻掍欢锛堢泭璁満姊帮級
+    /// 鐢ㄦ埛鍦ㄦ殏浼板簲浠樺崟鍒楄〃鍕鹃€夛紙鏆傚瓨/鍒涘缓/閲嶆柊瀹℃牳鐘舵€侊級鍗曟嵁锛岀偣鍑?鑾峰彇浠风洰琛ㄤ环鏍?锛?    /// 绯荤粺鎵归噺鎸?閲囪喘浠风洰琛?鍙栨渶鏂板惈绋庡崟浠凤紝鍐欏洖鍗曟嵁浣?鍚◣鍗曚环(FTAXPRICE)"锛?    /// 鍐嶈蛋鏍囧噯淇濆瓨浠ヨЕ鍙戝€兼洿鏂帮紙鍒锋柊 绋庨/浠风◣鍚堣 绛夛級锛屾渶鍚庝繚瀛樺崟鎹€?    /// 娉ㄥ唽浣嶇疆锛欰P_Payable 鍒楄〃琛ㄥ崟鐨?&lt;ListPlugins&gt;銆?    /// 璇存槑锛氭殏浼板簲浠樺崟涓庤储鍔″簲浠樺崟鍏辩敤鍚屼竴 FormId(AP_Payable)锛屾湰鎻掍欢浠呭鐞嗙珛璐︾被鍨?鏆備及(2)銆?    /// </summary>
+    [Description("鐩婅鏈烘-鏆備及搴斾粯鍗曞垪琛ㄨ幏鍙栦环鐩〃浠锋牸"), HotUpdate]
+    public class YxjTempPayableGetPriceListPlugIn : AbstractListPlugIn
+    {
+        // 鍒楄〃鎸夐挳 BarItemKey锛堝凡鍦?BOS 鍒楄〃鑿滃崟涓缓绔嬶級
+        private const string BarItemGetPrice = "tbGetPrice";
+
+        // 绔嬭处绫诲瀷锛? = 鏆備及
+        private const string AcctTypeTemp = "2";
+
+        // 鍏佽鍙栦环鐨勫崟鎹姸鎬侊細鏆傚瓨(Z) / 鍒涘缓(A) / 閲嶆柊瀹℃牳(D)
+        private static readonly HashSet<string> AllowDocStatus = new HashSet<string> { "Z", "A", "B", "D" };
+
+        /// <summary>
+        /// 琛屽紩鐢細鐢ㄤ簬鎶?鍙栦环缁撴灉"鍐欏洖瀵瑰簲鐨勫崟鎹綋琛?        /// </summary>
+        private class EntryRef
+        {
+            public DynamicObject Bill;          // 鎵€灞炲崟鎹?            public DynamicObject Entry;         // 鍗曟嵁浣撹
+            public long SupplierId;              // 渚涘簲鍟嗗唴鐮侊紙琛ㄥご锛?            public long MaterialId;             // 鐗╂枡鍐呯爜锛堣涓婏級
+            public bool IncludedTax;            // 鏄惁浠ュ惈绋庝环褰曞叆
+            public string SourceType;           // 婧愬崟绫诲瀷(FSOURCETYPE)
+            public string SourceBillNo;         // 婧愬崟缂栧彿(FSourceBillNo)
+            public int PriceType;               // 鎺ㄥ鍚庣殑浠锋牸绫诲瀷锛?/3锛夛紝鎺ㄥ鍚庡～鍏?        }
+
+        public override void BarItemClick(BarItemClickEventArgs e)
+        {
+            base.BarItemClick(e);
+
+            // 浠呭搷搴?鑾峰彇浠风洰琛ㄤ环鏍?鎸夐挳
+            if (e.BarItemKey != BarItemGetPrice)
+            {
+                return;
+            }
+
+            // 1. 鍙栭€変腑琛屼富閿?FID)
+            object[] pkValues = this.ListView.SelectedRowsInfo.GetPrimaryKeyValues();
+            if (pkValues == null || pkValues.Length == 0)
+            {
+                this.View.ShowMessage("璇峰厛鍕鹃€夐渶瑕佽幏鍙栦环鏍肩殑鏆備及搴斾粯鍗曘€?);
+                return;
+            }
+
+            var ids = new List<long>();
+            foreach (object pk in pkValues)
+            {
+                ids.Add(Convert.ToInt64(pk));
+            }
+
+            // 2. 鍔犺浇鍗曟嵁锛圓P_Payable 涓庤储鍔″簲浠樺崟鍚岃〃鍗曪紝闇€鎸夌珛璐︾被鍨嬭繃婊ゅ嚭鏆備及锛?            BusinessInfo info = this.View.BillBusinessInfo;
+            DynamicObject[] bills = BusinessDataServiceHelper.Load(this.Context, info, null, null);
+            if (bills == null || bills.Length == 0)
+            {
+                this.View.ShowMessage("鍔犺浇鍗曟嵁澶辫触锛岃纭鍗曟嵁鐘舵€併€?);
+                return;
+            }
+
+            // 3. 鏀堕泦鍙栦环琛屽紩鐢?+ 鏀堕泦婧愬崟缂栧彿锛堢敤浜庢壒閲忔帹瀵间环鏍肩被鍨嬶級
+            var refs = new List<EntryRef>();
+            var sourceBillNos = new List<string>();
+            var changedBills = new HashSet<DynamicObject>();
+            int skippedCount = 0;
+
+            foreach (DynamicObject bill in bills)
+            {
+                // 浠呭鐞嗘殏浼扮珛璐︾被鍨?                string acctType = (bill["FSETACCOUNTTYPE"] == null) ? string.Empty : bill["FSETACCOUNTTYPE"].ToString();
+                if (acctType != AcctTypeTemp)
+                {
+                    continue;
+                }
+
+                // 鐘舵€侀檺鍒讹細浠?鏆傚瓨 / 鍒涘缓 / 閲嶆柊瀹℃牳
+                string docStatus = (bill["DOCUMENTSTATUS"] == null) ? string.Empty : bill["DOCUMENTSTATUS"].ToString();
+                if (!AllowDocStatus.Contains(docStatus))
+                {
+                    continue;
+                }
+
+                long supplierId = (bill["SupplierId_ID"] == null) ? 0L : Convert.ToInt64(bill["SupplierId_ID"]);
+                bool includedTax = (bill["ISTAX"] != null) && Convert.ToBoolean(bill["ISTAX"]);
+
+                var entryObjs = bill["AP_PAYABLEENTRY"] as DynamicObjectCollection;
+                if (entryObjs == null)
+                {
+                    continue;
+                }
+
+                foreach (DynamicObject entry in entryObjs)
+                {
+
+                    if (entry["IsFree"] != null && Convert.ToBoolean(entry["IsFree"]))
+                    {
+                        continue;
+                    }
+
+                    long materialId = (entry["MaterialId_Id"] == null) ? 0L : Convert.ToInt64(entry["MaterialId_Id"]);
+                    if (materialId == 0L)
+                    {
+                        continue;
+                    }
+
+                    decimal currentTaxPrice = (entry["TaxPrice"] == null) ? 0m : Convert.ToDecimal(entry["TaxPrice"]);
+                    if (currentTaxPrice > 0m)
+                    {
+                        skippedCount++;
+                        continue;
+                    }
+
+                    string sourceType = (entry["FSOURCETYPE"] == null) ? string.Empty : entry["FSOURCETYPE"].ToString();
+                    string sourceBillNo = (entry["SourceBillNo"] == null) ? string.Empty : entry["SourceBillNo"].ToString();
+
+                    if (!string.IsNullOrEmpty(sourceBillNo) && !sourceBillNos.Contains(sourceBillNo))
+                    {
+                        sourceBillNos.Add(sourceBillNo);
+                    }
+
+                    refs.Add(new EntryRef
+                    {
+                        Bill = bill,
+                        Entry = entry,
+                        SupplierId = supplierId,
+                        MaterialId = materialId,
+                        IncludedTax = includedTax,
+                        SourceType = sourceType,
+                        SourceBillNo = sourceBillNo
+                    });
+                }
+            }
+
+            if (refs.Count == 0)
+            {
+                if (skippedCount > 0)
+                {
+                    this.View.ShowMessage(string.Format("鎵€閫夊崟鎹腑鎵€鏈夐潪璧犲搧琛屽凡鏈夊惈绋庡崟浠凤紝鏃犻渶鍙栦环锛堝凡璺宠繃 {0} 琛岋級銆?, skippedCount));
+                }
+                else
+                {
+                    this.View.ShowMessage("鎵€閫夊崟鎹腑娌℃湁绗﹀悎鍙栦环鏉′欢鐨勮锛堥渶涓烘殏浼般€佷笖澶勪簬鏆傚瓨/鍒涘缓/閲嶆柊瀹℃牳鐘舵€併€佸惈鏈夋晥鐗╂枡锛夈€?);
+                }
+                return;
+            }
+
+            // 4. 鎵归噺鏌ラ噰璐叆搴撳崟涓氬姟绫诲瀷锛屾帹瀵兼瘡琛屼环鏍肩被鍨嬶紙鏍囧噯閲囪喘/濮斿锛?            Dictionary<string, string> bizMap = PriceListQueryHelper.GetBusinessTypeMap(this.Context, sourceBillNos);
+            foreach (var r in refs)
+            {
+                r.PriceType = PriceListQueryHelper.DerivePriceType(r.SourceType, r.SourceBillNo, bizMap);
+            }
+
+            // 5. 鏋勯€犲彇浠疯姹傚苟鎵归噺鍙栦环
+            var reqs = new List<PriceListQueryHelper.PriceReq>();
+            foreach (var r in refs)
+            {
+                reqs.Add(new PriceListQueryHelper.PriceReq
+                {
+                    SupplierId = r.SupplierId,
+                    MaterialId = r.MaterialId,
+                    PriceType = r.PriceType,
+                    IncludedTax = r.IncludedTax
+                });
+            }
+
+            Dictionary<string, decimal?> priceMap = PriceListQueryHelper.GetLatestTaxPrice(this.Context, reqs);
+
+            // 6. 鎵嬪姩璁＄畻鎵€鏈夐噾棰濆瓧娈?+ 鏀堕泦 FEntryId锛堢敤浜?SQL 鎵归噺 UPDATE 鍏滃簳锛?            int filledCount = 0;
+            const decimal taxRate = 0.13m;
+            var entryUpdates = new Dictionary<long, (string price, string allAmt, string noTaxAmt, string taxAmt)>();
+            var headerTotals = new Dictionary<long, string>();
+
+            foreach (var r in refs)
+            {
+                var req = new PriceListQueryHelper.PriceReq
+                {
+                    SupplierId = r.SupplierId,
+                    MaterialId = r.MaterialId,
+                    PriceType = r.PriceType,
+                    IncludedTax = r.IncludedTax
+                };
+
+                if (priceMap.TryGetValue(PriceListQueryHelper.BuildKey(req), out decimal? price) && price.HasValue)
+                {
+                    decimal taxPrice = price.Value;
+                    decimal unitPrice = Math.Round(taxPrice / (1m + taxRate), 6);
+                    decimal qty = (r.Entry["PriceQty"] == null) ? 0m : Convert.ToDecimal(r.Entry["PriceQty"]);
+                    decimal allAmt = Math.Round(qty * taxPrice, 2);
+                    decimal noTaxAmt = Math.Round(qty * unitPrice, 2);
+                    decimal taxAmt = Math.Round(allAmt - noTaxAmt, 2);
+
+                    r.Entry["TaxPrice"] = taxPrice;
+                    r.Entry["FPrice"] = unitPrice;
+                    r.Entry["FALLAMOUNTFOR_D"] = allAmt;
+                    r.Entry["FNoTaxAmountFor_D"] = noTaxAmt;
+                    r.Entry["FTAXAMOUNTFOR_D"] = taxAmt;
+
+                    long entryId = Convert.ToInt64(r.Entry["Id"]);
+                    entryUpdates[entryId] = (
+                        unitPrice.ToString("F6", CultureInfo.InvariantCulture),
+                        allAmt.ToString("F2", CultureInfo.InvariantCulture),
+                        noTaxAmt.ToString("F2", CultureInfo.InvariantCulture),
+                        taxAmt.ToString("F2", CultureInfo.InvariantCulture));
+
+                    changedBills.Add(r.Bill);
+                    filledCount++;
+                }
+            }
+
+            if (changedBills.Count == 0)
+            {
+                if (skippedCount > 0)
+                {
+                    this.View.ShowMessage(string.Format("鏈湪閲囪喘浠风洰琛ㄤ腑鍖归厤鍒板搴斾环鏍硷紝宸茶烦杩?{0} 琛岋紙宸叉湁鍚◣鍗曚环锛夈€?, skippedCount));
+                }
+                else
+                {
+                    this.View.ShowMessage("鏈湪閲囪喘浠风洰琛ㄤ腑鍖归厤鍒板搴斾环鏍硷紝鏈洿鏂颁换浣曞崟鎹€?);
+                }
+                return;
+            }
+
+            // 6b. 姹囨€昏〃澶翠环绋庡悎璁?            foreach (DynamicObject bill in changedBills)
+            {
+                long billId = Convert.ToInt64(bill["Id"]);
+                var entries = bill["AP_PAYABLEENTRY"] as DynamicObjectCollection;
+                decimal total = 0m;
+                if (entries != null)
+                {
+                    foreach (DynamicObject entry in entries)
+                    {
+                        total += (entry["FALLAMOUNTFOR_D"] == null)
+                            ? 0m
+                            : Convert.ToDecimal(entry["FALLAMOUNTFOR_D"]);
+                    }
+                }
+                total = Math.Round(total, 2);
+                bill["FALLAMOUNTFOR"] = total;
+                headerTotals[billId] = total.ToString("F2", CultureInfo.InvariantCulture);
+            }
+
+            // 7. 璧版爣鍑嗕繚瀛橈紙璁╁钩鍙版洿鏂?TaxPrice + 鐗堟湰/鏃堕棿鎴筹級
+            BusinessDataServiceHelper.Save(this.Context, info, changedBills.ToArray());
+
+            // 8. 鎵归噺 SQL UPDATE 鍏滃簳閲戦瀛楁锛堣绠楀瓧娈?ORM 涓嶅啓锛屽繀椤?SQL 琛ワ級
+            if (entryUpdates.Count > 0)
+            {
+                var sb = new StringBuilder();
+                string entryIdList = string.Join(",", entryUpdates.Keys);
+                string billIdList = string.Join(",", headerTotals.Keys);
+
+                sb.Append("UPDATE T_AP_PAYABLEENTRY SET ");
+                sb.Append("FPrice = CASE FENTRYID ");
+                foreach (var kv in entryUpdates)
+                    sb.AppendFormat("WHEN {0} THEN {1} ", kv.Key, kv.Value.price);
+                sb.Append("END, ");
+                sb.Append("FALLAMOUNTFOR = CASE FENTRYID ");
+                foreach (var kv in entryUpdates)
+                    sb.AppendFormat("WHEN {0} THEN {1} ", kv.Key, kv.Value.allAmt);
+                sb.Append("END, ");
+                sb.Append("FNoTaxAmountFor = CASE FENTRYID ");
+                foreach (var kv in entryUpdates)
+                    sb.AppendFormat("WHEN {0} THEN {1} ", kv.Key, kv.Value.noTaxAmt);
+                sb.Append("END, ");
+                sb.Append("FTAXAMOUNTFOR = CASE FENTRYID ");
+                foreach (var kv in entryUpdates)
+                    sb.AppendFormat("WHEN {0} THEN {1} ", kv.Key, kv.Value.taxAmt);
+                sb.Append("END ");
+                sb.AppendFormat("WHERE FENTRYID IN ({0}) AND FID IN ({1})", entryIdList, billIdList);
+                DBServiceHelper.ExecuteDataSet(this.Context, sb.ToString());
+
+                var sbHead = new StringBuilder();
+                sbHead.Append("UPDATE T_AP_PAYABLE SET ");
+                sbHead.Append("FALLAMOUNTFOR = CASE FID ");
+                foreach (var kv in headerTotals)
+                    sbHead.AppendFormat("WHEN {0} THEN {1} ", kv.Key, kv.Value);
+                sbHead.Append("END ");
+                sbHead.AppendFormat("WHERE FID IN ({0})", billIdList);
+                DBServiceHelper.ExecuteDataSet(this.Context, sbHead.ToString());
+            }
+
+            // 9. 鍒锋柊鍒楄〃骞舵彁绀虹粨鏋?            this.View.Refresh();
+            if (skippedCount > 0)
+            {
+                this.View.ShowMessage(string.Format("宸茶烦杩?{0} 琛岋紙宸叉湁鍚◣鍗曚环锛夛紝宸叉垚鍔熶负 {1} 琛岃幏鍙栦环鐩〃浠锋牸骞朵繚瀛樸€?, skippedCount, filledCount));
+            }
+            else
+            {
+                this.View.ShowMessage(string.Format("宸叉垚鍔熶负 {0} 琛岃幏鍙栦环鐩〃浠锋牸骞朵繚瀛樸€?, filledCount));
+            }
+        }
+    }
+}
