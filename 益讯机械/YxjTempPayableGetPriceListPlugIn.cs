@@ -136,7 +136,7 @@ namespace kingdee.CustLI.Business.PlugIn
 
             int filledCount = 0;
             var entryUpdates = new Dictionary<long, (string taxPrice, string price, string allAmt, string noTaxAmt, string taxAmt)>();
-            var headerTotals = new Dictionary<long, decimal>();
+            var headerTotals = new Dictionary<long, (decimal allAmt, decimal taxAmt, decimal noTaxAmt)>();
             var billIdMap = new Dictionary<DynamicObject, long>();
 
             foreach (var r in refs)
@@ -200,9 +200,12 @@ namespace kingdee.CustLI.Business.PlugIn
                     taxAmt.ToString("F2", System.Globalization.CultureInfo.InvariantCulture));
 
                 if (headerTotals.ContainsKey(billId))
-                    headerTotals[billId] += allAmt;
+                {
+                    var old = headerTotals[billId];
+                    headerTotals[billId] = (old.allAmt + allAmt, old.taxAmt + taxAmt, old.noTaxAmt + noTaxAmt);
+                }
                 else
-                    headerTotals[billId] = allAmt;
+                    headerTotals[billId] = (allAmt, taxAmt, noTaxAmt);
 
                 billIdMap[r.Bill] = billId;
                 changedBills.Add(r.Bill);
@@ -242,6 +245,7 @@ namespace kingdee.CustLI.Business.PlugIn
 
             DynamicObject[] dataObjects = changedBills.ToArray();
 
+            // Step 1 - Save前写死金额
             if (entryUpdates.Count > 0)
             {
                 var sb = new StringBuilder();
@@ -269,36 +273,28 @@ namespace kingdee.CustLI.Business.PlugIn
                 sb.Append("FTAXAMOUNTFOR = CASE FENTRYID ");
                 foreach (var kv in entryUpdates)
                     sb.AppendFormat("WHEN {0} THEN {1} ", kv.Key, kv.Value.taxAmt);
-                sb.Append("END, ");
-                sb.Append("FALLAMOUNT = CASE FENTRYID ");
-                foreach (var kv in entryUpdates)
-                    sb.AppendFormat("WHEN {0} THEN {1} ", kv.Key, kv.Value.allAmt);
-                sb.Append("END, ");
-                sb.Append("FNOTAXAMOUNT = CASE FENTRYID ");
-                foreach (var kv in entryUpdates)
-                    sb.AppendFormat("WHEN {0} THEN {1} ", kv.Key, kv.Value.noTaxAmt);
-                sb.Append("END, ");
-                sb.Append("FTAXAMOUNT = CASE FENTRYID ");
-                foreach (var kv in entryUpdates)
-                    sb.AppendFormat("WHEN {0} THEN {1} ", kv.Key, kv.Value.taxAmt);
                 sb.Append("END ");
                 sb.AppendFormat("WHERE FENTRYID IN ({0}) AND FID IN ({1});", entryIdList, billIdList);
 
                 sb.Append("UPDATE T_AP_PAYABLE SET ");
                 sb.Append("FALLAMOUNTFOR = CASE FID ");
                 foreach (var kv in headerTotals)
-                    sb.AppendFormat("WHEN {0} THEN {1} ", kv.Key, kv.Value.ToString("F2", System.Globalization.CultureInfo.InvariantCulture));
+                    sb.AppendFormat("WHEN {0} THEN {1} ", kv.Key, kv.Value.allAmt.ToString("F2", System.Globalization.CultureInfo.InvariantCulture));
                 sb.Append("END ");
                 sb.AppendFormat("WHERE FID IN ({0});", billIdList);
 
-                sb.Append("UPDATE T_AP_PAYABLEPLAN SET ");
-                sb.Append("FPAYAMOUNTFOR = CASE FID ");
+                sb.Append("UPDATE T_AP_PAYABLEFIN SET ");
+                sb.Append("FALLAMOUNT = CASE FID ");
                 foreach (var kv in headerTotals)
-                    sb.AppendFormat("WHEN {0} THEN {1} ", kv.Key, kv.Value.ToString("F2", System.Globalization.CultureInfo.InvariantCulture));
+                    sb.AppendFormat("WHEN {0} THEN {1} ", kv.Key, kv.Value.allAmt.ToString("F2", System.Globalization.CultureInfo.InvariantCulture));
                 sb.Append("END, ");
-                sb.Append("FPAYAMOUNT = CASE FID ");
+                sb.Append("FTAXAMOUNT = CASE FID ");
                 foreach (var kv in headerTotals)
-                    sb.AppendFormat("WHEN {0} THEN {1} ", kv.Key, kv.Value.ToString("F2", System.Globalization.CultureInfo.InvariantCulture));
+                    sb.AppendFormat("WHEN {0} THEN {1} ", kv.Key, kv.Value.taxAmt.ToString("F2", System.Globalization.CultureInfo.InvariantCulture));
+                sb.Append("END, ");
+                sb.Append("FNOTAXAMOUNT = CASE FID ");
+                foreach (var kv in headerTotals)
+                    sb.AppendFormat("WHEN {0} THEN {1} ", kv.Key, kv.Value.noTaxAmt.ToString("F2", System.Globalization.CultureInfo.InvariantCulture));
                 sb.Append("END ");
                 sb.AppendFormat("WHERE FID IN ({0});", billIdList);
 
@@ -307,8 +303,28 @@ namespace kingdee.CustLI.Business.PlugIn
 
             IOperationResult saveResult = BusinessDataServiceHelper.Save(this.Context, info, dataObjects);
 
+            // Step 2 - Save后更新付款计划
             if (saveResult.IsSuccess)
             {
+                if (headerTotals.Count > 0)
+                {
+                    var sbPlan = new StringBuilder();
+                    string billIdList = string.Join(",", headerTotals.Keys);
+
+                    sbPlan.Append("UPDATE T_AP_PAYABLEPLAN SET ");
+                    sbPlan.Append("FPAYAMOUNTFOR = CASE FID ");
+                    foreach (var kv in headerTotals)
+                        sbPlan.AppendFormat("WHEN {0} THEN {1} ", kv.Key, kv.Value.allAmt.ToString("F2", System.Globalization.CultureInfo.InvariantCulture));
+                    sbPlan.Append("END, ");
+                    sbPlan.Append("FPAYAMOUNT = CASE FID ");
+                    foreach (var kv in headerTotals)
+                        sbPlan.AppendFormat("WHEN {0} THEN {1} ", kv.Key, kv.Value.allAmt.ToString("F2", System.Globalization.CultureInfo.InvariantCulture));
+                    sbPlan.Append("END ");
+                    sbPlan.AppendFormat("WHERE FID IN ({0});", billIdList);
+
+                    DBServiceHelper.ExecuteDataSet(this.Context, sbPlan.ToString());
+                }
+
                 this.View.Refresh();
                 this.View.ShowMessage(string.Format("已成功为 {0} 行获取价目表价格并保存。", filledCount));
             }
