@@ -1,0 +1,153 @@
+#引入clr运行库
+import clr
+#添加对cloud插件开发的常用组件的引用
+clr.AddReference('System')
+clr.AddReference('System.Data')
+clr.AddReference('Kingdee.BOS')
+clr.AddReference('Kingdee.BOS.DataEntity')
+clr.AddReference('Kingdee.BOS.Core')
+clr.AddReference('Kingdee.BOS.App')
+clr.AddReference('Kingdee.BOS.App.Core')
+clr.AddReference('Kingdee.BOS.ServiceHelper')
+#导入cloud基础库中的常用实体对象（分命名空间导入，不会递归导入）
+from Kingdee.BOS import *
+from Kingdee.BOS.Core import *
+from Kingdee.BOS.Core.DependencyRules import *
+from Kingdee.BOS.Core.Bill import *
+from Kingdee.BOS.Core.DynamicForm.PlugIn import *
+from Kingdee.BOS.Core.DynamicForm.PlugIn.ControlModel import *
+from System import *
+from System.Data import *
+from Kingdee.BOS.App.Data import *
+from System.Collections.Generic import List
+from Kingdee.BOS.ServiceHelper import *
+from Kingdee.BOS.Core.DynamicForm import *
+from Kingdee.BOS.Core.Metadata.EntityElement import *
+from Kingdee.BOS.Core.Metadata.FieldElement import *
+from Kingdee.BOS.Orm.DataEntity import *
+
+#单据新增界面打开时触发，可以获取到单据初始化之后的数据
+#通常用于对单据新增进行默认值填充，例如，设置默认日期，填充单据体默认数据等
+def AfterCreateModelData(e):
+	billObj = this.Model.DataObject;#单据完整数据包,如需通过实体数据包操作读写数据,可从这里开始取
+	this.View.Model.SetValue("FDate", "2022-7-1");#设置默认日期
+	#msg=("{0}").format(this.View.BillBusinessInfo.GetEntity("FBillHead").TableName);
+	#this.View.ShowMessage(msg);
+
+#界面数据绑定完毕后触发，通常在这里对字段控件状态进行设置
+#例如,设置颜色、设置字段锁定性/可见性、设置下拉列表动态枚举选项等
+def AfterBindData(e):
+	this.View.GetControl("FDate").Enabled=False;#False:锁定,True:解锁
+	#this.View.GetControl("控件标识").Visible=False;#False:隐藏,True:显示
+
+#单据头菜单点击事件，从参数e中获取菜单标识，来判断是哪个菜单发生了点击
+#这里一定要加判断，只需要监听需要的菜单,多个菜单的话，使用if elif结构,Python中没有Switch结构
+def BarItemClick(e):
+	key=e.BarItemKey.ToUpperInvariant();#菜单标识大写
+	if(key=="TESTBTN1".ToUpperInvariant()):
+		msg=("菜单[{0}]点击事件捕捉到了，可以继续菜单的功能啦！").format(key);
+		this.View.ShowMessage(msg);
+	elif(key=="TESTBTN2".ToUpperInvariant()):
+		msg=("菜单[{0}]点击事件捕捉到了，可以继续菜单的功能啦！").format(key);
+		this.View.ShowMessage(msg);
+
+#单据体菜单点击事件，与BarItemClick类似,只不过这个是监听单据体菜单栏
+def EntryBarItemClick(e):
+	key=e.BarItemKey.ToUpperInvariant();
+	if(key=="entryTESTBTN1".ToUpperInvariant()):
+		msg=("单据体菜单[{0}]点击事件捕捉到了，可以继续菜单的功能啦！").format(key);
+		this.View.ShowMessage(msg);
+		#这里通常需要获取当前单据体选中的行)(前面有讲怎么获取)，然后对这一行进行处理
+
+#按钮控件/超链接控件点击事件
+#例如，点击一个超链接，弹出某个单据等等，在此事件实现
+def ButtonClick(e):
+	BtnKey=e.Key.ToUpperInvariant();#控件标识大写
+	if(BtnKey=="F_ora_LINK".ToUpperInvariant()):
+		msg=("按钮[{0}]点击事件捕捉到了，可以继续菜单的功能啦！").format(BtnKey);
+		this.View.ShowMessage(msg);
+
+#单据体行双击事件,使用时一定要判断单据体!!!
+#只捕捉行双击:获取事件参数中的行号即可
+#需要捕捉单元格双击：获取事件参数中的行号和字段标识
+def EntityRowDoubleClick(e):
+	entityKey=e.Key.ToUpperInvariant();#单据体标识大写
+	row=e.Row;#双击行号,从0开始
+	fldKey=e.ColKey.ToUpperInvariant();#双击单元格字段标识大写
+	msg=("单据体[{0}]第[{1}]行,字段[{2}]双击啦！").format(entityKey,row,fldKey);
+	this.View.ShowMessage(msg);
+	
+#单据体行点击事件，也就是单据体单行选择事件,使用时一定要判断单据体!!!
+#通过此事件可以知道当前焦点行，通常需要开发切换行处理子单据体数据时使用
+def EntityRowClick(e):
+	entityKey=e.Key.ToUpperInvariant();#单据体标识大写
+	row=e.Row;#选择行号,从0开始
+	msg=("单据体[{0}]第[{1}]行被选中啦！").format(entityKey,row);
+	this.View.ShowMessage(msg);
+
+#单据体行删除事件，在这个事件里可以最后获取被删除的行数据
+#使用时一定要判断单据体!!!
+def AfterDeleteRow(e):
+	entityKey=e.EntityKey.ToUpperInvariant();#单据体标识大写
+	row=e.Row;#删除的行号,从0开始,注意：此时用此行号从单据实体数据包中取的数据已不是删除的行数据了
+	deletRowObj=e.DataEntity;#删除的行数据包
+	msg=("单据体[{0}]第[{1}]行被删除啦！").format(entityKey,row);
+	this.View.ShowMessage(msg);
+
+#值更新事件，当BOS的值更新与实体服务配置实现不了想要的功能时，就会用到插件值更新事件
+#事件参数中可以获取:发生值更新的字段标识、行号、更新前字段值、更新后字段值
+#注意!!!使用时一定要判断字段标识!!!字段在BOS中勾选【即时触发值更新】才会触发插件值更新事件
+def DataChanged(e):
+	fldKey=e.Field.Key.ToUpperInvariant();#字段标识大写
+	if(fldKey<>"ABC"):#注意:示例代码是不等于，实际应使用等于进行判断
+		row=e.Row;#字段所在的行号,从0开始，单据头字段为0
+		oldValue=e.OldValue;#更新前字段值
+		newValue=e.NewValue;#更新后的字段值
+		msg=("第[{0}]行字段[{1}]从[{2}]更新成了[{3}]").format(row,fldKey,oldValue,newValue);
+		this.View.ShowMessage(msg);
+
+#资料字段选择前事件,通俗来讲：就是放大镜点击弹出选择列表前触发的事件
+#用途1:此用法最多，就是对弹出的选择列表进行动态过滤，控制数据选择范围
+#用途2:控制资料字段录入顺序,例如,可以控制没选供应商，就不能选物料，并弹出提示!
+#用途3:非资料类型字段，启用编辑按钮(3个点...)，点击时触发
+def BeforeF7Select(e):
+	#可以从事件参数中读取的信息
+	fldKey=e.FieldKey.ToUpperInvariant();#触发的字段标识大写
+	baseFormId=e.FormId;#资料字段的具体资料类型,例如物料，就是BD_Material
+	row=e.Row;#字段所在的行号,从0开始，单据头字段为0
+	#通过修改事件参数中的信息,可以实现的功能,一定要判断字段标识
+	if(fldKey=="FMATERIALID"):
+		supObj=this.View.Model.GetValue("FSupplierId");#使用字段标识,获取供应商
+		billObj = this.Model.DataObject;#从单据实体数据包获取也一样,再演示1次,别忘了这种方法
+		supObj=billObj["SupplierId"];#使用绑定实体属性
+		if(supObj==None):
+			this.View.ShowWarnningMessage("请先选择供应商");
+			e.Cancel=True;#取消弹出选择列表
+			return;#跳出事件方法
+		e.IsShowUsed = False;#允许选择禁用的数据
+		e.IsShowApproved = False;#允许选择未审核的数据,True表示
+		myFilterStr=(" '{0}'='VEN00001' ").format(supObj["Number"]);#拼接过滤条件,按照SQL条件表达式写即可
+		e.ListFilterParameter.Filter=myFilterStr;#测试设置了，供应商编码='VEN00001'，才会弹出物料，否则弹出空白列表
+
+#通过编码给资料字段赋值前触发,插进赋值，或者直接将编码粘贴到字段里面
+#在此事件可以对赋值编码进行校验,相当于对BeforeF7Select事件的一个补充
+#BeforeF7Select主要是界面录入时控制数据选择列表，但是通过插件赋值是不会触发的
+def BeforeSetItemValueByNumber(e):
+	fldKey=e.BaseDataField.Key.ToUpperInvariant();#触发的字段标识大写
+	Num=e.CurrentSetNumber;#当前赋值的资料编码
+	row=e.Row;#字段所在的行号,从0开始，单据头字段为0
+	e.IsShowUsed = False;#允许赋值禁用的数据
+	e.IsShowApproved = False;#允许赋值未审核的数据,True表示
+	e.Filter="";#同样可以拼接过滤条件进行数据范围控制
+	
+#单据界面执行单据操作前触发，例如，保存,提交,审核等，使用时一定要判断操作代码
+#此事件在校验规则之前触发
+def BeforeDoOperation(e):
+	opCode=e.Operation.FormOperation.Operation.ToUpperInvariant();#触发操作代码大写,例如保存:SAVE
+	if(opCode=="SAVE"):
+		e.Cancel=True;#可以取消触发操作
+		this.View.ShowWarnningMessage("取消保存！");
+#单据界面执行单据操作完成后触发，例如，保存,提交,审核等，使用时一定要判断操作代码
+def AfterDoOperation(e):
+	opCode=e.Operation.Operation.ToUpperInvariant();#触发操作代码大写,例如保存:SAVE
+	this.View.ShowMessage(str(opCode));

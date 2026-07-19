@@ -1,0 +1,94 @@
+#引入clr运行库
+import clr
+#添加对cloud插件开发的常用组件的引用
+clr.AddReference('System')
+clr.AddReference('System.Data')
+clr.AddReference('Kingdee.BOS')
+clr.AddReference('Kingdee.BOS.Core')
+clr.AddReference('Kingdee.BOS.App')
+clr.AddReference('Kingdee.BOS.ServiceHelper')
+#导入cloud基础库中的常用实体对象（分命名空间导入，不会递归导入）
+from Kingdee.BOS import *
+from Kingdee.BOS.Core import *
+from Kingdee.BOS.Core.Bill import *
+from Kingdee.BOS.Core.DynamicForm.PlugIn import *
+from Kingdee.BOS.Core.DynamicForm.PlugIn.ControlModel import *
+from System import *
+from System.Data import *
+from Kingdee.BOS.App.Data import *
+from System.Collections.Generic import List
+from Kingdee.BOS.ServiceHelper import *
+from Kingdee.BOS.Core.Metadata.EntityElement import *
+
+#这里通过单据头菜单点击事件来演示，在单据头增加了一个测试菜单tbTestButton
+def BarItemClick(e):
+	barItemkey=e.BarItemKey;
+	if(barItemkey=="tbTestButton"):
+		billObj = this.View.Model.DataObject;#获取单据头的数据包，即单据的数据包,DynamicObject类型,可进一步解析
+		billId=billObj["Id"];#单据ID内码，单据未保存时，为0
+#单据头基本字段=======================================================================================
+		billNo=billObj["BillNo"];#字符串类型
+		date=billObj["Date"];#日期类型
+#单据头资料类型的字段===================================================================================
+		supplierObj=billObj["SupplierId"];#DynamicObject类型，基础资料、组织、辅助资料取值均是DynamicObject
+		supplierNum=("{0}").format(supplierObj["Number"]);#字符串类型，直接转换成字符串使用
+		supplierName=("{0}").format(supplierObj["Name"]);#多语言文本，可以直接转换成字符串使用
+#基础资料内码获取======================================================================================
+		#①从实体数据包中直接读取，实体数据包中，单独构建了资料字段的ID，key是固定格式:"资料字段属性key_Id"
+		#供应商所属实体是单据头，直接可以从单据头中读取，供应商的key是SupplierId,对应ID的key是:SupplierId_Id
+		supplierId=("{0}").format(billObj["SupplierId_Id"]);#整数，可以直接转换成字符串使用
+		#②从基础资料数据包中读取
+		supplierId=("{0}").format(supplierObj["Id"]);#整数，可以直接转换成字符串使用
+#基础资料数据包深度解析=================================================================================
+		#先获取供应商的财务信息子单据头，key是SupplierFinance​
+		supplierFinObj=supplierObj["SupplierFinance"];#DynamicObjectCollection类型
+		#再从供应商-财务信息子单据头获取付款条件
+		payConditionId=supplierFinObj[0]["PayCondition_Id"];#付款条件Id,整数类型
+		payConditionObj=supplierFinObj[0]["PayCondition"];#付款条件Id,整数类型
+#子单据头字段获取示例===================================================================================
+		#先获取财务信息子单据头，key是POOrderFinance
+		FinObj=billObj["SupplierFinance"];#DynamicObjectCollection类型
+		#再从财务信息子单据头获取价税合计，key是BillAllAmount
+		payConditionId=FinObj[0]["BillAllAmount"];#浮点数类型
+#单据体字段获取示例===================================================================================
+		entity=billObj["POOrderEntry"];#订单明细单据体,DynamicObjectCollection类型
+		for rObj in entity:
+			entryId=rObj["Id"];#明细ID内码，单据未保存时，为0
+			matObj=rObj["MaterialId"];#物料数据包,DynamicObject类型,可进一步解析
+			matId=rObj["MaterialId_Id"];#物料Id获取方式1
+			matId=rObj["Id"];#物料ID获取方式2
+			matNum=matObj["Number"];#物料编码,字符串类型
+			matNam=("{0}").format(matObj["Name"]);#物料名称，多语言文本,直接转换成字符串使用
+			Qty=rObj["Qty"];#采购数量，浮点数类型
+			taxPrice=rObj["TaxPrice"];#含税单价,浮点数类型
+#子单据体读取====================================================================================
+		#读取方式1
+		for rObj in entity:
+			subEntity=rObj["POOrderEntryDeliPlan"];#交货明细子单据体，DynamicObjectCollection类型
+			for subRowObj in subEntity:
+				subEntryId=subRowObj["Id"];#子单据体行ID内码，整数
+				deliveryDate=subRowObj["PlanDeliveryDate"];#计划交货日期，日期类型
+		#读取方式2，推荐，这是常用方式
+		subEn = this.View.BillBusinessInfo.GetEntity("FEntryDeliveryPlan");#SubEntryEntity类型，需要添加引入:from Kingdee.BOS.Core.Metadata.EntityElement import *
+		for rObj in entity:
+			subEntity = subEn.DynamicProperty.GetValue(rObj);#把父分录的行数据包传进去,子单据体数据包,DynamicObjectCollection类型
+			for subRowObj in subEntity:
+				subEntryId=subRowObj["Id"];#子单据体行ID内码，整数
+				deliveryDate=subRowObj["PlanDeliveryDate"];#计划交货日期，日期类型
+#实体数据包修改赋值==============================================================================
+		billObj["BillNo"]="test001";#修改单据编号
+		for rObj in entity:
+			matId=1001;#这里是随手写的一个整数，实际情况要写系统中可用的物料ID
+			#根据物料Id获取物料数据包
+			matFld=this.View.BillBusinessInfo.GetField("FMaterialId");#物料字段元素元数据,使用字段标识
+			matObj=BusinessDataServiceHelper.LoadSingle(this.Context, matId, matFld.RefFormDynamicObjectType);
+			rObj["MaterialId_Id"]=matId;#物料Id赋值
+			rObj["MaterialId"]=matObj;#物料数据包赋值
+			rObj["Qty"]=100;#修改采购数量
+			rObj["TaxPrice"]=10;#修改含税单价
+		this.View.UpdateView("FBillNo");#刷新单据编号字段
+		this.View.UpdateView("FPOOrderEntry");#刷新整个单据体
+		#拼接显示信息，可以多次修改,测试获取的不同字段，看显示出来的对不对
+		msg=("测试显示获取的字段值:{0}").format(billNo);
+		this.View.ShowMessage(msg);
+		

@@ -1,0 +1,117 @@
+##****************************服务插件*******************
+#引入clr运行库
+import clr
+#添加对cloud插件开发的常用组件的引用
+clr.AddReference('System')
+clr.AddReference('System.Data')
+clr.AddReference('Kingdee.BOS')
+clr.AddReference('Kingdee.BOS.Core')
+clr.AddReference('Kingdee.BOS.App')
+clr.AddReference('Kingdee.BOS.DataEntity')
+clr.AddReference('Kingdee.BOS.Contracts')
+clr.AddReference('Kingdee.BOS.ServiceHelper')
+clr.AddReference('Newtonsoft.Json')
+#导入cloud基础库中的常用实体对象（分命名空间导入，不会递归导入）
+from Kingdee.BOS import *
+from Kingdee.BOS.Core import *
+from Kingdee.BOS.Contracts import *
+from Kingdee.BOS.Orm.DataEntity import *
+from Kingdee.BOS.DataEntity import *
+from Kingdee.BOS.Core.Bill import *
+from Kingdee.BOS.Core.DynamicForm import *
+from Kingdee.BOS.Core.DynamicForm.PlugIn import *
+from Kingdee.BOS.Core.DynamicForm.PlugIn.ControlModel import *
+from System import *
+from System.Data import *
+from Kingdee.BOS.App.Data import *
+from System.Collections.Generic import List
+from Kingdee.BOS.ServiceHelper import *
+from Newtonsoft.Json import JsonConvert
+from Newtonsoft.Json.Linq import *
+
+#选项设置,在操作服务初始化时执行
+#可以对操作的执行参数进行设置，比如是否是否启动事务，是否支持批量处理等
+def OnPrepareOperationServiceOption(e):
+	e.SupportTransaction=True;#是否启动事务，默认true
+	e.SurportBatchTransaction=True;#是否支持批量处理,默认true
+
+#字段预加载事件,这是一个非常必要使用的事件
+#出于性能考虑，服务插件并不会加载单据完整的数据包，只有默认加载单据编号、单据ID等一些关键字段
+#在插件中需要读取的其他字段信息，需要在此事件中先加载，方法也很简单。
+#如果在后续事件中取单据字段时，报错提示字段标识不存在时，可以看是否在这里进行预加载
+def OnPreparePropertys(e):
+    e.FieldKeys.Add("FBillTypeID");
+    e.FieldKeys.Add("字段标识");#这里使用的是字段标识，后面从数据包取值用的是绑定实体属性
+
+#校验器干预
+#可以这里添加自定义的校验器，或者对已有校验器进行取消干预
+#如果校验器执行不通过，将不会继续往后执行，一般配置不能实现的自定义校验逻辑在此实现
+#只有在APP层执行的操作才会默认执行校验器，例如，保存、提交、审核、删除等。
+#其他在Web层执行界面交互的操作默认不会执行，例如下推、选单、复制等，可通过表单插件强行执行绑定在操作上的校验器。
+#校验器需要单独定义一个类，将类的对象加载到此事件中使用，校验器类定义参考
+#Python校验器开发案例
+def OnAddValidators(e):
+	vlidators=e.Validators;#已有校验器
+
+#执行操作事务前事件，通知插件对要处理的数据进行排序等预处理（事务外触发）
+#此事件在操作校验之后、操作实现之前执行
+#此事件在操作事务之前，即此事件中的数据库处理，不受操作的事务保护
+def BeforeExecuteOperationTransaction(e):
+	e.Cancel = False;#可以再这里做一些强制的校验，可取消操作继续执行
+	if(e.Cancel==True):
+		e.CancelMessage=("{0}被取消了！").format(this.FormOperation.OperationName.GetString(2052));
+
+#操作事务前事件（事务内触发），支持回滚
+#此事件在操作校验之后，在操作事务开始之后，在操作执行之前
+#此事件中的数据库处理，受操作的事务保护,支持回滚
+#通常此事件，可以用来做数据准备，在操作之前，获取操作执行前的数据，
+#如果是保存操作，可以对单据数据包做修改，但如果发生异常，单据数据包不会回滚，可以在RollbackData事件中处理
+#例如,审核操作的话，这里取单据状态字段还是审核中，删除操作的话，这里是最后一次能从数据库取到单据数据的事件
+def BeginOperationTransaction(e):
+	#e.CancelOperation=True;#取消操作
+	#e.CancelFormService = True;#取消表单服务
+	#读取执行本次操作的单据实体数据包，这个数据包里面能取到的字段取决于前面OnPreparePropertys预加载的字段
+	#billObj可以理解成前面篇章讲解的单据头实体数据包，只不过字段不全而已，实体结构还是单据数据包的结构
+	#为什么要循环呢？
+	#因为操作是可以批量处理的，所以取到的是一个单据列表的形式，如果只有一张单据触发，e.DataEntitys里面就只有一个单据数据包
+	for billObj in e.DataEntitys:
+		billId=billObj["Id"];#单据ID
+		billNo=billObj["BillNo"];#单据编号
+
+#操作事物后事件（事务内触发）
+#此事件在操作执行之后，操作的内部逻辑已经执行完毕，数据库的数据也已经更新成操作后的数据
+#所以删除操作，在这里无法通过SQL从数据库查询单据数据
+#此事件数据库处理，受操作的事务保护，支持回滚
+#通常我们要保证单据操作正常执行完成之后再处理一些任务时，并且需要事务保护时，可以在此事件中完成。
+#例如,最常见的，执行一个SQL更新，去更新相关单据的数据
+def EndOperationTransaction(e):
+	#这里获取单据数据包方式和前面一样
+	for billObj in e.DataEntitys:
+		billId=billObj["Id"];#单据ID
+		billNo=billObj["BillNo"];#单据编号
+
+#内部事务执行失败后，调用回滚数据事件（事务外触发）
+#此事件只有在操作执行过程中发生异常时才触发
+#操作异常时，回滚内存中的数据,在此处理
+def RollbackData(e):
+	for billObj in e.DataEntitys:
+		billId=billObj["Id"];#单据ID
+#执行操作事务后事件，通知插件对象执行其它事务无关的业务逻辑（事务外触发）
+#此事件在操作执行后，操作的内部逻辑已经执行完毕,并且在事务提交之后
+#事件中的数据库处理，不受操作的事务保护
+#通常此事件，也可以做同步数据，但是此同步数据的成功与否，不需影响操作
+#尽量不要在此事件中抛出异常。因为前面事务已经提交，后面抛出异常容易导致后续业务不正常。例如单据启用了工作流，提交成功后抛出异常，会导致工作流后续业务处理不正确。
+#正确的做法是把异常信息作为提示信息放到OperationResult中，另外，如果是数据不合法校验，应该在事务前或事务中抛出异常。
+def AfterExecuteOperationTransaction(e):
+	#这里获取单据数据包方式和前面一样
+	for billObj in e.DataEntitys:
+		billId=billObj["Id"];#单据ID
+		billNo=billObj["BillNo"];#单据编号
+	#追加自定义提示信息，参考如下
+	result=OperateResult();
+	result.SuccessStatus=True;
+	#result.PKValue = "单据ID";
+	#result.Number = "单据编号";
+	result.Message = "提示信息";
+	this.OperationResult.OperateResult.Add(result);
+	

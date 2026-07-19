@@ -1,0 +1,179 @@
+#引入clr运行库
+import clr
+#添加对cloud插件开发的常用组件的引用
+clr.AddReference('System')
+clr.AddReference('System.Data')
+clr.AddReference('Kingdee.BOS')
+clr.AddReference('Kingdee.BOS.Core')
+clr.AddReference('Kingdee.BOS.App')
+clr.AddReference('Kingdee.BOS.ServiceHelper')
+#导入cloud基础库中的常用实体对象（分命名空间导入，不会递归导入）
+from Kingdee.BOS import *
+from Kingdee.BOS.Core import *
+from Kingdee.BOS.Core.Bill import *
+from Kingdee.BOS.Core.DynamicForm.PlugIn import *
+from Kingdee.BOS.Core.DynamicForm.PlugIn.ControlModel import *
+from Kingdee.BOS.Core.List import*
+from Kingdee.BOS.Core.List.PlugIn import *
+from Kingdee.BOS.Core.SqlBuilder import *
+from Kingdee.BOS.Core.Metadata import *
+from System import *
+from System.Data import *
+from Kingdee.BOS.App.Data import *
+from System.Collections.Generic import List
+from Kingdee.BOS.ServiceHelper import *
+
+#列表插件过滤事件,加载列表时会触发
+#用法1:对列表过条件进行干预,此用法最广
+#用法2:修改快捷过滤和过滤框的条件过滤,案例:动态构建下拉列表-年份
+def PrepareFilterParameter(e):
+	custfilterObj=e.CustomFilter;#过滤框实体数据包
+	filterStr=e.FilterString;#过滤框条件过滤表达式
+	sortStr=e.SortString#排序字段表达式
+	statusFilterStr=e.StatusFilterString;#状态字段过滤表达式
+	#msg=("{0}").format(statusFilterStr);
+	#this.View.ShowMessage(msg);
+	#myFilterStr=("FBillNo like '%{0}%' ").format("1");#单据编号包含1
+	#e.AppendQueryFilter(myFilterStr);#追加过滤条件
+
+#列表菜单点击事件,列表菜单点击开始时触发
+#此事件也是很常用的,可以在此事件中取消菜单的点击事件
+#使用时一定要判断菜单标识!!!
+def BarItemClick(e):
+	key=e.BarItemKey.ToUpperInvariant();
+	if(key=="TestBtn".ToUpperInvariant()):
+		#e.Cancel=True;#取消菜单的点击，可以阻止后续功能的触发,可完成一些简单校验
+		#msg=("菜单[{0}]点击被取消啦！").format(key);
+		#this.View.ShowMessage(msg);
+		return;
+	
+#列表菜单点击后事件,列表菜单点击完成后触发
+#使用时一定要判断菜单标识!!!
+#自定义菜单功能实现建议在此事件中完成
+#应用案例:列表插件实现单据批改
+def AfterBarItemClick(e):
+	key=e.BarItemKey.ToUpperInvariant();
+	if(key<>"TestBtn".ToUpperInvariant()):
+		return;
+	msg=("菜单[{0}]点击完成啦！").format(key);
+	#this.View.ShowMessage(msg);
+	selectedRowsInfo=this.ListView.SelectedRowsInfo;#列表勾选的数据集
+	billIDs=selectedRowsInfo.GetPrimaryKeyValues();
+	entryIDs=selectedRowsInfo.GetEntryPrimaryKeyValues();
+	datas = this.ListModel.GetData(selectedRowsInfo);#根据勾选的数据集获取数据包
+	if (datas.Count <= 0):
+		this.View.ShowWarnningMessage("未选择任何行！");
+		return;
+	msg=("选中了[{0}]个单据,[{1}]条明细！").format(billIDs.Length,entryIDs.Length);
+	s="";
+	#下面是方法③读取所有选中行的字段数据示例
+	for row in datas:
+		billNo=row["FBILLNO"];#单据编号
+		billId=row["FID"];#单据ID
+		s=("{0}\r\n{1}--{2}").format(s,billNo,billId);
+		#其他字段建议先判断是否存在
+		if(row.DynamicObjectType.Properties.ContainsKey("FMaterialId_Id")):#物料Id
+			matId=row["FMaterialId_Id"];
+			s=("{0}--{1}").format(s,matId);
+		if(row.DynamicObjectType.Properties.ContainsKey("FMaterialId_Ref")):#物料数据包
+			#可以从这里读取基础资料属性字段,基础资料的取值方式可以参考这里
+			matObj=row["FMaterialId_Ref"];
+			matNum=matObj["Number"];#物料编码
+			matName=matObj["Name"];#物料名称
+			s=("{0}--{1}--{2}").format(s,matNum,matName);
+		if(row.DynamicObjectType.Properties.ContainsKey("FDATE")):#日期,普通字段参考这里
+			date=row["FDate"];
+			s=("{0}--{1}").format(s,date);
+	msg=("提示：{0}").format(s);
+	this.View.ShowMessage(msg);
+
+#列表双击事件
+def ListRowDoubleClick(e):
+	row=e.Row;#双击的行号
+	colKey=e.ColKey;#双击单元格所在列字段标识,不能直接用来取单元格的值,可用来做单元格判断
+	currentPageRowsInfo = this.ListView.CurrentPageRowsInfo;#列表当前页的数据
+	startRow = this.ListModel.StartRow;#当前页开始序号
+	num = row - startRow;#双击行所在当前页的行序号
+	listSelectedRow = currentPageRowsInfo[num - 1];#当前双击行数据
+	FID=listSelectedRow.PrimaryKeyValue;#双击行单据ID
+	entryId=listSelectedRow.EntryPrimaryKeyValue;#双击行明细ID
+	#通过QueryBuilderParemeter取数，可以获取当前单元格的值,这里顺便演示一下这种取数方法吧**************************
+	queryParam=QueryBuilderParemeter();
+	queryParam.FormId=this.View.BillBusinessInfo.GetForm().Id;
+	queryParam.BusinessInfo=this.View.BillBusinessInfo;
+	#billId=SelectorItemInfo(this.View.BillBusinessInfo.GetForm().PkFieldName);#单据内码
+	#queryParam.SelectItems.Add(billId);
+	#billNo=SelectorItemInfo("FBillNo");#单据编号
+	#queryParam.SelectItems.Add(billNo);
+	#supplierId=SelectorItemInfo("FSupplierId");#供应商内码
+	#queryParam.SelectItems.Add(supplierId);
+	#supplierName=SelectorRefItemInfo("FSupplierId.FName");#取基础资料属性字段写法不一样,要注意
+	#supplierName.PropertyName="FSupplierId_FName";#后台是SQL取数，字段名不能有".",要重命名
+	#queryParam.SelectItems.Add(supplierName);
+	#以上是通过QueryBuilderParemeter取数示例,下面就是取当前双击单元格的值******************************************
+	fldKey=colKey;
+	if("." in colKey):#说明是基础资料的属性
+		colItem=SelectorRefItemInfo(colKey);
+		fldKey=colKey.Replace(".","_");
+		colItem.PropertyName=fldKey;
+		queryParam.SelectItems.Add(colItem);
+	else:
+		queryParam.SelectItems.Add(SelectorItemInfo(colKey));
+	entity=this.View.BillBusinessInfo.GetEntity(listSelectedRow.EntryEntityKey);
+	if(entity<>None):#列表显示了单据体
+		queryParam.FilterClauseWihtKey=("{0}_{1}={2}").format(entity.Key,entity.EntryPkFieldName,entryId);
+	else:#列表只显示了单据头
+		queryParam.FilterClauseWihtKey=("{0}={1}").format(this.View.BillBusinessInfo.GetForm().PkFieldName,FID);
+	dataRows=QueryServiceHelper.GetDynamicObjectCollection(this.Context, queryParam);#获取数据结果数据包
+	colValue="";
+	if(dataRows.Count>0):
+		colValue=("{0}").format(dataRows[0][fldKey]);
+	msg=("双击了第{0}行的[{1}]").format(row,colValue);
+	this.View.ShowMessage(msg);
+	e.Cancel=True;#取消双击事件,否则双击会打开单据,也可以在BOS中取消列表双击事件绑定的操作
+
+#列表单元格超链接点击事件
+#该事件中数据处理方式和上面的列表双击事件中几乎一致,这里不再重复讲解
+def EntryButtonCellClick(e):
+	row=e.Row;#点击超链接所在序号
+	fldKey=e.FieldKey;#超链接所在列字段标识
+	msg=("点击了第{0}行的[{1}]").format(row,fldKey);
+	this.View.ShowMessage(msg);
+	e.Cancel=True;#取消事件,单据编号会自动超链接打开单据
+
+#列表条件格式化事件
+#可在此事件中根据不同的条件判断设置颜色,BOS中也可以配置，这里可以实现更灵活的条件判断
+def OnFormatRowConditions(args):
+	if (args.DataRow.ColumnContains("FMaterialId_Ref")):
+		#注意！！！这里根据特别演示基础资料属性字段判断设置颜色，因为【列表条件格式化】不支持配置基础资料属性字段作为条件字段
+		matObj=args.DataRow.DynamicObject["FMaterialId_Ref"];#物料字段实体数据包，可以取到引用属性中添加了的属性字段
+		matNum=("{0}").format(matObj["Number"])
+		if(matNum[0:1]=="1"):#物料编码是1开头的显示颜色,这里是实体数据包取值，别忘了是用绑定实体属性标识
+			fc=FormatCondition();
+			fc.ForeColor="#FFFF9B98";#前景色
+			#fc.BackColor="#FFFF9B98";#背景色
+			args.FormatConditions.Add(fc);
+	if(args.DataRow.ColumnContains("FDate")):
+		#这里是普通字段判断设置颜色，首先需要判断列表是否显示了这个字段，否则没显示该字段时会报错，而且只有显示了这个字段才能判断设置颜色
+		dateStr=str(args.DataRow["FDate"]);#创建人Id
+		date=DateTime.Parse(dateStr).ToString("yyyy-MM-dd");
+		#this.View.ShowMessage(date);
+		if(date==DateTime.Now.ToString("yyyy-MM-dd")):#单据日期=今天的单据显示颜色
+			fc=FormatCondition();
+			#fc.ForeColor="#FFFF9B98";#前景色
+			fc.BackColor="#0000FF";#背景色
+			args.FormatConditions.Add(fc);
+
+#单据界面执行单据操作前触发，例如，保存,提交,审核等，使用时一定要判断操作代码
+#与表单插件类似，不同的是，列表里面是批量处理，通常需要获取勾选的所有单据,参考前面事件中的介绍
+def BeforeDoOperation(e):
+	opCode=e.Operation.FormOperation.Operation.ToUpperInvariant();#触发操作代码大写,例如保存:SAVE
+	if(opCode=="DELETE"):
+		e.Cancel=True;#可以取消触发操作
+		this.View.ShowWarnningMessage("取消删除！");
+#单据界面执行单据操作完成后触发，例如，保存,提交,审核等，使用时一定要判断操作代码
+#与表单插件类似，不同的是，列表里面是批量处理，通常需要获取勾选的所有单据,参考前面事件中的介绍
+def AfterDoOperation(e):
+	opCode=e.Operation.Operation.ToUpperInvariant();#触发操作代码大写,例如保存:SAVE
+	this.View.ShowMessage(str(opCode));
+			

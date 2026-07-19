@@ -1,0 +1,276 @@
+##****************************服务插件*******************
+#引入clr运行库
+import clr
+#添加对cloud插件开发的常用组件的引用
+clr.AddReference('System')
+clr.AddReference('System.Data')
+clr.AddReference('Kingdee.BOS')
+clr.AddReference('Kingdee.BOS.Core')
+clr.AddReference('Kingdee.BOS.App')
+clr.AddReference('Kingdee.BOS.App.Core')
+clr.AddReference('Kingdee.BOS.DataEntity')
+clr.AddReference('Kingdee.BOS.Contracts')
+clr.AddReference('Kingdee.BOS.ServiceHelper')
+clr.AddReference('Newtonsoft.Json')
+#导入cloud基础库中的常用实体对象（分命名空间导入，不会递归导入）
+from Kingdee.BOS import *
+from Kingdee.BOS.Core import *
+from Kingdee.BOS.Core.Bill import *
+from Kingdee.BOS.Core.Metadata import*
+from Kingdee.BOS.Core.Metadata.FormElement  import*
+from Kingdee.BOS.Contracts import *
+from Kingdee.BOS.Orm.DataEntity import *
+from Kingdee.BOS.DataEntity import *
+from Kingdee.BOS.Core.Bill import *
+from Kingdee.BOS.Core.Permission import *
+from Kingdee.BOS.Core.DynamicForm import *
+from Kingdee.BOS.Core.DynamicForm.PlugIn import *
+from Kingdee.BOS.Core.DynamicForm.PlugIn.Args import *
+from Kingdee.BOS.Core.DynamicForm.PlugIn.ControlModel import *
+from Kingdee.BOS.Core.DependencyRules import *#触发实体服务规则需要添加此引用
+from Kingdee.BOS.Core.SqlBuilder import *
+from Kingdee.BOS.App.Core import *
+from System import *
+from System.Data import *
+from Kingdee.BOS.App.Data import *
+from System.Collections.Generic import List
+from Kingdee.BOS.ServiceHelper import *
+from Newtonsoft.Json import JsonConvert
+from Newtonsoft.Json.Linq import *
+
+#自定义方法：创建单据视图View
+def CreateBillView(ctx,formId,billId):
+	#读取元数据
+	meta = MetaDataServiceHelper.Load(ctx, formId);
+	form = meta.BusinessInfo.GetForm();
+	#创建用于引入数据的单据view
+	tp = Type.GetType("Kingdee.BOS.Web.Import.ImportBillView,Kingdee.BOS.Web");
+	billView = Activator.CreateInstance(tp);
+	openParam = CreateOpenParameter(meta, ctx,billId);#调用自定义方法获得单据打开参数
+	provider = form.GetFormServiceProvider();
+	billView.Initialize(openParam, provider);
+	return billView;
+#自定义方法：构建单据打开参数
+def  CreateOpenParameter(meta, ctx,billId):
+	form = meta.BusinessInfo.GetForm();
+	openParam = BillOpenParameter(form.Id, meta.GetLayoutInfo().Id);
+	openParam.Context = ctx;
+	openParam.ServiceName = form.FormServiceName;
+	openParam.PageId = Guid.NewGuid().ToString();#随机产生一个不重复的PageId，作为视图的标识
+	openParam.FormMetaData = meta;
+	#单据ID为空是新增，不为空则认为是修改,若是修改方式EDIT打开单据，会触发网控，注意后面要释放
+	openParam.Status = OperationStatus.ADDNEW if(billId==None) else OperationStatus.EDIT;
+	if(billId<>None):#若传入了具体单据ID，将ID传入单据打开参数
+		openParam.PkValue = billId;
+	openParam.CreateFrom = CreateFrom.Default;
+	openParam.DefaultBillTypeId = "";
+	openParam.SetCustomParameter("ShowConfirmDialogWhenChangeOrg", False);#主业务组织改变时，不用弹出提示界面
+	plugs = form.CreateFormPlugIns();
+	openParam.SetCustomParameter(FormConst.PlugIns, plugs);
+	args = PreOpenFormEventArgs(ctx, openParam);
+	for plug in plugs:
+		plug.PreOpenForm(args);
+	if (args.Cancel == True):
+		s="不处理";#不理会插件PreOpenForm事件中的诉求,也就是说会强制打开单据
+	return openParam;
+#自定义方法：演示创建一个二开的单据,通过View构建单据数据包
+def CreateBillObj():
+	formID="ORA_TestBill";#单据FormId
+	meta=MetaDataServiceHelper.GetFormMetaData(this.Context, formID);
+	#创建一个新单据View,billId传空，若为修改单据，可传具体单据ID
+	billView = CreateBillView(this.Context, formID,None);
+	billView.LoadData();
+	dynamicFormView =billView;
+	dynamicFormView.SetItemValueByID("F_RBSU_OrgId",orgId,0);#给表头组织赋值
+	dynamicFormView.UpdateValue("FBillNo",0,"Test001");#给单据编号赋值
+	dynamicFormView.UpdateValue("F_RBSU_Remark",0,"测试插件创建");#给表头备注赋值
+	#通过View获取单据的完整数据包,相当于表单插件中的this.View.Model.DataObject
+	newBilllObj=billView.Model.DataObject;
+	entityKey="FEntity";
+	En = billView.Model.DataObject[entityKey];#获取单据体数据包
+	En.Clear();#先清空单据体
+	i=0;#单据体行号游标
+	billView.Model.CreateNewEntryRow(entityKey);#为单据体创建一行数据，通常写在循环体内
+	dynamicFormView.UpdateValue("F_RBSU_OrderNo",i, "订单号");#为单据体字段赋值
+	dynamicFormView.SetItemValueByID("F_RBSU_MaterialId","物料ID",i);#用ID为基础资料字段赋值
+	dynamicFormView.SetItemValueByNumber("F_RBSU_StockId","仓库编码",i);#用编码为基础资料字段赋值
+	#触发字段值更新事件，否则，不会自动触发,参数说明：字段标识,行号(单据头字段填0)
+	dynamicFormView.InvokeFieldUpdateService("F_RBSU_StockId", i);
+	#下面2行可以触发实体服务规则
+	obj=BOSActionExecuteContext(dynamicFormView);#若是单据体触发，不要循环构建，此行放到循环体外
+	dataEntity=En[i];#单据体行数据包，若是单据头触发，则传入单据数据包
+	dynamicFormView.RuleContainer.RaiseDataChanged("F_RBSU_MaterialId", dataEntity,obj);
+	
+	#msg=JsonConvert.SerializeObject(newBilllObj);
+	#this.View.ShowMessage(msg);
+	#billView.InvokeFormOperation("Save");#可以通过View直接调用保存，参考下面调用前面讲的Save方法
+	billView.InvokeFormOperation(FormOperationEnum.Close);#关闭View
+	billView.Close();#关闭View
+	billView.CommitNetworkCtrl();#释放网控
+	#将数据包构建成集合,最后调用Save方法完成单据创建
+	newBillList=List[DynamicObject]();#批量保存单据时使用此方法最佳
+	newBillList.Add(newBilllObj);
+	saveRslt=BusinessDataServiceHelper.Save(this.Context, meta.BusinessInfo,newBillList.ToArray(), None, "Save");
+	return newBilllObj;
+def BeginOperationTransaction(e):
+	formID="PUR_PurchaseOrder";#单据FormId，非当前单据可写一个常量,当前单据可以从this.BusinessInfo.GetForm().Id获取
+	meta = MetaDataServiceHelper.Load(this.Context, formID);#读取单据的元数据
+	pkIds = List[object]();#需要获取的单据ID集合
+	for billObj in e.DataEntitys:
+		billId=billObj["Id"];#单据ID
+		pkIds.Add(billId);
+	objType=meta.BusinessInfo.GetDynamicObjectType();#获取单据数据包的对象类型
+	#这里顺带提一下,*********************************************************************************************************************
+	#如果是修改单据数据包，读取基础资料字段数据包赋值给基础资料字段时，不能使用meta.BusinessInfo.GetDynamicObjectType()
+	#baseFld=this.BusinessInfo.GetField("字段标识");
+	#应该按此方法获取objType，这样获取到的基础资料不是完整的数据包，而是根据单据字段引用属性加载的字段,这样的数据包赋值给单据中的资料字段才合适
+	#objType=baseFld.RefFormDynamicObjectType;
+	#**********************************************************************************************************************************
+	billObjs=BusinessDataServiceHelper.Load(this.Context, pkIds.ToArray(),objType);#根据单据内码集合读取多个单据的完整数据包
+	obj=BusinessDataServiceHelper.LoadSingle(this.Context, pkIds[0], objType);#根据单据内码读取一个单据的完整数据包
+	
+	#通过构建QueryBuilderParemeter取数****************************************************************************************************
+	queryParam=QueryBuilderParemeter();
+	queryParam.FormId=formID;
+	queryParam.BusinessInfo=meta.BusinessInfo;
+	billId=SelectorItemInfo(meta.BusinessInfo.GetForm().PkFieldName);#单据内码
+	queryParam.SelectItems.Add(billId);
+	billNo=SelectorItemInfo("FBillNo");#单据编号
+	queryParam.SelectItems.Add(billNo);
+	supplierId=SelectorItemInfo("FSupplierId");#供应商内码
+	queryParam.SelectItems.Add(supplierId);
+	supplierName=SelectorRefItemInfo("FSupplierId.FName");#取基础资料属性字段写法不一样,要注意
+	supplierName.PropertyName="FSupplierId_FName";#后台是SQL取数，字段名不能有".",要重命名
+	queryParam.SelectItems.Add(supplierName);
+	
+	entity=meta.BusinessInfo.GetEntity("单据体标识");
+	queryParam.FilterClauseWihtKey="过滤条件";
+	#按单据体ID过滤，关键字要写成"单据体标识_FEntryId"
+	queryParam.FilterClauseWihtKey=("{0}_{1}={2}").format(entity.Key,entity.EntryPkFieldName,entryId);
+	dataRows=QueryServiceHelper.GetDynamicObjectCollection(this.Context, queryParam);#获取数据结果数据包
+	for r in dataRows:#循环获取结果数据包中的字段值
+		billNoValue=r["FBillNo"];
+	#QueryServiceHelper示例结束***********************************************************************************************************
+	
+	#调用单据保存、提交、审核************************************************************************************************************
+	ObjList=List[DynamicObject]();#单据的数据包集合
+	ObjList.Add(billObjs[0]);
+	#注意！调用保存时，传入的必须是完整的单据数据包
+	#Q:既然是Save方法，为什么还要传操作代码"Save"呢？
+	#A:Save方法调用的是单据操作列表中,"操作类型=保存"的操作，可以为单据添加多个"操作类型=保存"的操作。
+	#例如,可以添加一个"OnlySave",这个操作不注册任何服务插件和服务端服务，仅用于保存单据数据到数据库
+	saveRslt=BusinessDataServiceHelper.Save(this.Context, meta.BusinessInfo,ObjList.ToArray(), None, "Save");
+	if (saveRslt.SuccessDataEnity<>None):
+		ids=List[object]();#单据内码集合
+		for newBillObj in saveResult.SuccessDataEnity:
+			newBillId=newBillObj["Id"];
+			ids.Add(newBillId);
+		subRslt=BusinessDataServiceHelper.Submit(this.Context,meta.BusinessInfo,ids.ToArray(),"Submit",None);
+		if (subRslt.IsSuccess == True):
+			BusinessDataServiceHelper.Audit(this.Context,meta.BusinessInfo,ids.ToArray(),None);
+	if(saveRslt.IsShowMessage):#读取保存操作结果数据
+			OperationResultExt.MergeValidateErrors(saveRslt);
+			msg="";
+			for rst in saveRslt.OperateResult:
+				msg=("{0}\r\n{1}").format(msg,rst.Message);#拼接提示信息
+	#************************************************************************************************************************************
+	#调用单据空操作************************************************************************************************************************
+	optCode="DoNothing-AutoPush";#假设单据配置了一个自定义空操作，空操作配置了自动下推服务
+	DoNothing_PkIds=List[object]();#执行空操作的单据内码集合
+	DoNothing_PkIds.Add("10001");
+	BusinessDataServiceHelper.DoNothing(this.Context, meta.BusinessInfo, DoNothing_PkIds.ToArray(), optCode, None);
+	#*************************************************************************************************************************************
+	#①构建一个新的空白单据数据包，然后通过数据包操作赋值后，调用Save方法生成单据
+	#演示创建一个【其他往来单位】,别忘了第3篇讲解的单据数据包操作知识哦！
+	formID="FIN_OTHERS";
+	QTWLMeta=MetaDataServiceHelper.GetFormMetaData(this.Context, formID);#读取其他往来单位元数据
+	QTWLType = QTWLMeta.BusinessInfo.GetDynamicObjectType();
+	QTWLBillObj = DynamicObject(QTWLType);
+	QTWLBillObj["Number"]="Test001";#编码赋值
+	QTWLBillObj["Name"]="测试其他往来单位";#名称赋值
+	Orgmeta = MetaDataServiceHelper.Load(this.Context, "ORG_Organizations");#获取组织员数据
+	orgId="1";#创建组织和使用组织一致，使用同一个组织ID
+	createOrgFld=QTWLMeta.BusinessInfo.GetField("FCreateOrgId");
+	useOrgFld=QTWLMeta.BusinessInfo.GetField("FUseOrgId");
+	createOrgObj = BusinessDataServiceHelper.LoadSingle(this.Context, orgId, createOrgFld.RefFormDynamicObjectType);
+	useOrgObj = BusinessDataServiceHelper.LoadSingle(this.Context, orgId, useOrgFld.RefFormDynamicObjectType);
+	QTWLBillObj["CreateOrgId"]=createOrgObj;#创建组织赋值
+	QTWLBillObj["CreateOrgId_Id"]=orgId;
+	QTWLBillObj["UseOrgId"]=useOrgObj;#使用组织赋值
+	QTWLBillObj["UseOrgId_Id"]=orgId;
+	QTWLObjList=List[DynamicObject]();
+	QTWLObjList.Add(QTWLBillObj)
+	saveRslt=BusinessDataServiceHelper.Save(this.Context, QTWLMeta.BusinessInfo,QTWLObjList.ToArray(), None, "Save");
+	#************************************************************************************************************************************
+	#构建一个单据视图View，通过View操作单据数据包，就可以触发界面服务了，修改单据同样适用！*****************************************************
+	#演示创建一个二开的单据
+	CreateBillObj();#自定义方法调用，具体实现看前面
+	#************************************************************************************************************************************
+	#数据库操作执行SQL********************************************************************************************************************
+	#多行SQL语句拼接可以参考如下示例代码,/*dialect*/为方言标识，前面不能有空格，否则无法起作用。没有方言标识的SQL语句需要满足KSQL语法
+	orgSQL=("""/*dialect*/select org.FNUMBER,orgL.FNAME
+from T_ORG_organizations org
+inner Join T_ORG_organizations_L  orgL on org.FORGID=orgL.FORGID and orgL.FLocalEId=2052
+where OrgId='{0}'  """).format("1");
+	ds = DBUtils.ExecuteDataSet(this.Context,orgSQL);
+	tab = ds.Tables[0];
+	for dr in tab.Rows:
+		orgNum=dr["FNUMBER"];
+		orgName=dr["FNAME"];
+	dataRows=DBUtils.ExecuteDynamicObject(this.Context,orgSQL);
+	for dr in dataRows:
+		orgNum=dr["FNUMBER"];
+		orgName=dr["FNAME"];
+	updateSql=("""/*dialect*/update T_ORG_organizations set FNUMBER='testOrg001' where OrgId='{0}'  """).format("1");
+	x=DBUtils.Execute(this.Context,updateSql);
+	sqlLList=List[str]();
+	sqlLList.Add(updateSql);
+	if(sqlLList.Count>0):
+		DBUtils.ExecuteBatch(this.Context,sqlLList,sqlLList.Count);
+	#执行存储过程
+	ProcName="Proc_SimpleReport_BillA";
+	lstParam=List[SqlParam]();#构建存储过程参数
+	para=SqlParam("@P1",KDDbType.AnsiString,"AAA");
+	lstParam.Add(para);
+	para=SqlParam("@P2",KDDbType.AnsiString,"BBB");
+	lstParam.Add(para);
+	resutParas=DBUtils.ExecuteStoreProcedure(this.Context, ProcName, lstParam);
+	for dr in resutParas:
+		paraName=dr.Name;
+		paraValue=dr.Value;
+	#************************************************************************************************************************************
+	#读取系统参数示例
+	orgs=List[Int64]();#系统参数需要读取的组织
+	orgId=Int64.Parse("1");
+	orgs.Add(orgId);
+	sysParaFormId="XXX";#系统参数单据FormId
+	acctBookId=0;
+	paraName="参数字段标识";#使用绑定实体属性标识
+	#acctBookId:账簿Id,若读取的参数与账簿无关,传0
+	#orgs:组织内码，传入组织ID列表，则会以字典形式一次性返回多个组织的参数，组织ID为key。若参数与组织无关传0
+	#paraName:参数名为单个字段，则sysParaObj就是参数值，若为单据体，则sysParaObj是单据体的数据包,DynamicObjectCollection类型
+	sysParaObjs=SystemParameterServiceHelper.GetParamter(this.Context, orgs, acctBookId, sysParaFormId, paraName);
+	sysParaObj=sysParaObjs[orgId];
+	#也可直接传一个组织ID，获取单个组织的参数
+	sysParaObj=SystemParameterServiceHelper.GetParamter(this.Context, orgId, acctBookId, sysParaFormId, paraName);
+	#msg=JsonConvert.SerializeObject(sysParaObj);
+	#raise Exception(msg);
+	#读取用户选项参数
+	formID="PUR_PurchaseOrder";#单据FormId
+	meta = MetaDataServiceHelper.Load(this.Context, formID);
+	paraObjFormId=formMetadata.BusinessInfo.GetForm().ParameterObjectId;#单据的用户参数对象标识
+	formMeta = FormMetaDataCache.GetCachedFormMetaData(this.Context, paraObjFormId);
+	userId=this.Context.UserId;#用户Id
+	#读取到的用户UserParaObj为DynamicObject类型,相当于用户参数单据paraObjFormId对应的数据包，根据绑定实体属性标识即可读取具体参数字段值
+	UserParaObj=UserParamterServiceHelper.Load(this.Context, formMeta.BusinessInfo,userId, paraObjFormId, "UserParameter");
+	#如果对用户参数数据包UserParaObj进行修改之后，也可以参考如下Save方法保存，对用户参数进行修改
+	UserParamterServiceHelper.Save(this.Context, formMeta.BusinessInfo, UserParaObj,paraObjFormId,this.Context.UserId,"UserParameter");
+	#检查权限
+	businessObj=BusinessObject();#业务对象
+	formId="PUR_PurchaseOrder";#单据FormId
+	businessObj.Id=formId;
+	#可从数据库查询权限项ID:select a.FItemID,a.FNumber from T_SEC_PermissionItem a where  a.FNumber='BOS_AUDIT'
+	permissionItemId="权限项ID";
+	iResult = PermissionServiceHelper.FuncPermissionAuth(this.Context,businessObj,permissionItemId);
+	if (iResult.Passed==False):
+		raise Exception("对不起，您没有权限!") ;

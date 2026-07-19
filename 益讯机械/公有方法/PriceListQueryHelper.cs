@@ -37,32 +37,37 @@ namespace kingdee.CustLI.Business.PlugIn
             public decimal? Price { get; set; }      // 单价 (FPRICE)
         }
 
+        /// <summary>
+        /// 取价结果（含税率）：返回单价 + 税率，用于列表插件全字段计算
+        /// </summary>
+        public class PriceQueryResult
+        {
+            public decimal? Value { get; set; }    // 取到的价格（含税/不含税取决于请求）
+            public decimal? TaxRate { get; set; }   // 税率百分比 (FEntryTaxRate)
+        }
+
         #endregion
 
         #region 对外方法
 
         /// <summary>
         /// 批量取价：按 (供应商, 物料, 价格类型, 是否含税) 维度，
-        /// 取每组"生效日期(FEFFECTIVEDATE)最新"的含税单价。
+        /// 取每组"生效日期(FEFFECTIVEDATE)最新"的含税/不含税单价 + 税率。
         /// </summary>
         /// <param name="ctx">上下文</param>
         /// <param name="reqs">取价请求列表</param>
-        /// <returns>维度key -> 含税单价（取不到返回空）</returns>
-        public static Dictionary<string, decimal?> GetLatestTaxPrice(Context ctx, List<PriceReq> reqs)
+        /// <returns>维度key -> PriceQueryResult（单价+税率，取不到返回空）</returns>
+        public static Dictionary<string, PriceQueryResult> GetLatestTaxPrice(Context ctx, List<PriceReq> reqs)
         {
-            var result = new Dictionary<string, decimal?>();
+            var result = new Dictionary<string, PriceQueryResult>();
 
-            // 空请求直接返回，避免无谓查询
             if (reqs == null || reqs.Count == 0)
-            {
                 return result;
-            }
 
-            // 1. 维度去重，构造 IN 条件（一次查询覆盖全部请求）
             var suppliers = new HashSet<long>();
             var materials = new HashSet<long>();
             var priceTypes = new HashSet<int>();
-            var taxFlags = new HashSet<int>(); // 0/1
+            var taxFlags = new HashSet<int>();
 
             foreach (var r in reqs)
             {
@@ -72,22 +77,20 @@ namespace kingdee.CustLI.Business.PlugIn
                 taxFlags.Add(r.IncludedTax ? 1 : 0);
             }
 
-            // 2. 拼接 SQL：物理表 t_PUR_PriceList(头) + t_PUR_PriceListEntry(体)
-            //    过滤：供应商 / 物料 / 价格类型 / 是否含税 / 未禁用(FDISABLESTATUS<>'A')
-            //    按生效日期降序，保证同维度第一条即"最新"
-             string sql = string.Format(@"
-                SELECT a.FMATERIALID     AS FMATERIALID,
-                       b.FSUPPLIERID     AS FSUPPLIERID,
-                       b.FPriceType      AS FPRICETYPE,
-                       b.FIsIncludedTax  AS FISINCLUDEDTAX,
-                       a.FTAXPRICE       AS FTAXPRICE,
-                       a.FPRICE          AS FPRICE,
-                       a.FEFFECTIVEDATE  AS FEFFECTIVEDATE
+            string sql = string.Format(@"
+                SELECT a.FMATERIALID       AS FMATERIALID,
+                       b.FSUPPLIERID       AS FSUPPLIERID,
+                       b.FPriceType        AS FPRICETYPE,
+                       b.FIsIncludedTax    AS FISINCLUDEDTAX,
+                       a.FTAXPRICE         AS FTAXPRICE,
+                       a.FPRICE            AS FPRICE,
+                       a.FEFFECTIVEDATE    AS FEFFECTIVEDATE,
+                       a.FEntryTaxRate     AS FENTRYTAXRATE
                 FROM t_PUR_PriceListEntry a
                 INNER JOIN t_PUR_PriceList b ON a.FID = b.FID
-                WHERE a.FMATERIALID   IN ({0})
-                  AND b.FSUPPLIERID   IN ({1})
-                  AND b.FPriceType    IN ({2})
+                WHERE a.FMATERIALID    IN ({0})
+                  AND b.FSUPPLIERID    IN ({1})
+                  AND b.FPriceType     IN ({2})
                   AND b.FIsIncludedTax IN ({3})
                   AND a.FDISABLESTATUS <> 'A'
                 ORDER BY a.FEFFECTIVEDATE DESC
@@ -99,28 +102,27 @@ namespace kingdee.CustLI.Business.PlugIn
 
             DataSet ds = DBServiceHelper.ExecuteDataSet(ctx, sql);
             if (ds == null || ds.Tables.Count == 0 || ds.Tables[0].Rows.Count == 0)
-            {
                 return result;
-            }
 
-            // 3. 组装结果：按维度key去重，因已按生效日期降序，首个即最新
-            //    含税(tax==1)取FTAXPRICE，不含税(tax==0)取FPRICE
             foreach (DataRow row in ds.Tables[0].Rows)
             {
                 long mat = Convert.ToInt64(row["FMATERIALID"]);
                 long sup = Convert.ToInt64(row["FSUPPLIERID"]);
                 int pt = Convert.ToInt32(row["FPRICETYPE"]);
                 int tax = Convert.ToInt32(row["FISINCLUDEDTAX"]);
-                decimal price;
+
+                decimal? price;
                 if (tax == 1)
-                    price = (row["FTAXPRICE"] == DBNull.Value) ? 0m : Convert.ToDecimal(row["FTAXPRICE"]);
+                    price = (row["FTAXPRICE"] == DBNull.Value) ? null : (decimal?)Convert.ToDecimal(row["FTAXPRICE"]);
                 else
-                    price = (row["FPRICE"] == DBNull.Value) ? 0m : Convert.ToDecimal(row["FPRICE"]);
+                    price = (row["FPRICE"] == DBNull.Value) ? null : (decimal?)Convert.ToDecimal(row["FPRICE"]);
+
+                decimal? taxRate = (row["FENTRYTAXRATE"] == DBNull.Value) ? (decimal?)null : Convert.ToDecimal(row["FENTRYTAXRATE"]);
 
                 string key = BuildKey(sup, mat, pt, tax);
                 if (!result.ContainsKey(key))
                 {
-                    result[key] = price;
+                    result[key] = new PriceQueryResult { Value = price, TaxRate = taxRate };
                 }
             }
 
@@ -457,7 +459,7 @@ namespace kingdee.CustLI.Business.PlugIn
         /// <summary>
         /// 由维度分量构造字典 key
         /// </summary>
-        private static string BuildKey(long sup, long mat, int pt, int tax)
+        public static string BuildKey(long sup, long mat, int pt, int tax)
         {
             return string.Format("{0}_{1}_{2}_{3}", sup, mat, pt, tax);
         }
