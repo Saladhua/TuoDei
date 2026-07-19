@@ -187,22 +187,12 @@ namespace kingdee.CustLI.Business.PlugIn
                 var entryObjs = bill["AP_PAYABLEENTRY"] as DynamicObjectCollection;
                 if (entryObjs == null) continue;
 
-                decimal headAmount = 0m;
-                decimal headTaxAmount = 0m;
+                decimal totalAmountFor = 0m;
 
                 foreach (DynamicObject entry in entryObjs)
                 {
-                    headAmount += Convert.ToDecimal(entry["Amount"] ?? 0m);
-                    headTaxAmount += Convert.ToDecimal(entry["TaxAmount"] ?? 0m);
+                    totalAmountFor += Convert.ToDecimal(entry["FALLAMOUNTFOR_D"] ?? 0m);
                 }
-
-                bill["ALLAMOUNT"] = Math.Round(headAmount, 6);
-
-                decimal headAmountFor = Math.Round(headAmount, 6);
-                decimal headTaxAmountFor = Math.Round(headTaxAmount, 6);
-                bill["ALLAMOUNTFOR"] = headAmountFor;
-                bill["TAXAMOUNTFOR"] = headTaxAmountFor;
-                bill["PRICEFOR"] = Math.Round(headAmountFor - headTaxAmountFor, 6);
 
                 var payPlan = bill["AP_PAYABLEPLAN"] as DynamicObjectCollection;
                 if (payPlan != null)
@@ -210,9 +200,9 @@ namespace kingdee.CustLI.Business.PlugIn
                     payPlan.Clear();
                     DynamicObject newPlan = new DynamicObject(payPlan.DynamicCollectionItemPropertyType);
                     newPlan["ENDDATE"] = bill["FENDDATE_H"];
-                    newPlan["PAYAMOUNTFOR"] = headAmountFor;
+                    newPlan["PAYAMOUNTFOR"] = Math.Round(totalAmountFor, 6);
                     newPlan["FPAYRATE"] = 100m;
-                    newPlan["PAYAMOUNT"] = headAmountFor;
+                    newPlan["PAYAMOUNT"] = Math.Round(totalAmountFor, 6);
                     payPlan.Add(newPlan);
                 }
             }
