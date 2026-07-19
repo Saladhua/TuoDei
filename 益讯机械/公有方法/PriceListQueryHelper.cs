@@ -37,29 +37,20 @@ namespace kingdee.CustLI.Business.PlugIn
             public decimal? Price { get; set; }      // 单价 (FPRICE)
         }
 
-        /// <summary>
-        /// 取价结果（含税率）：返回单价 + 税率，用于列表插件全字段计算
-        /// </summary>
-        public class PriceQueryResult
-        {
-            public decimal? Value { get; set; }    // 取到的价格（含税/不含税取决于请求）
-            public decimal? TaxRate { get; set; }   // 税率百分比 (FEntryTaxRate)
-        }
-
         #endregion
 
         #region 对外方法
 
         /// <summary>
         /// 批量取价：按 (供应商, 物料, 价格类型, 是否含税) 维度，
-        /// 取每组"生效日期(FEFFECTIVEDATE)最新"的含税/不含税单价 + 税率。
+        /// 取每组"生效日期(FEFFECTIVEDATE)最新"的含税/不含税单价。
         /// </summary>
         /// <param name="ctx">上下文</param>
         /// <param name="reqs">取价请求列表</param>
-        /// <returns>维度key -> PriceQueryResult（单价+税率，取不到返回空）</returns>
-        public static Dictionary<string, PriceQueryResult> GetLatestTaxPrice(Context ctx, List<PriceReq> reqs)
+        /// <returns>维度key -> 单价（取不到返回空）</returns>
+        public static Dictionary<string, decimal?> GetLatestTaxPrice(Context ctx, List<PriceReq> reqs)
         {
-            var result = new Dictionary<string, PriceQueryResult>();
+            var result = new Dictionary<string, decimal?>();
 
             if (reqs == null || reqs.Count == 0)
                 return result;
@@ -84,8 +75,7 @@ namespace kingdee.CustLI.Business.PlugIn
                        b.FIsIncludedTax    AS FISINCLUDEDTAX,
                        a.FTAXPRICE         AS FTAXPRICE,
                        a.FPRICE            AS FPRICE,
-                       a.FEFFECTIVEDATE    AS FEFFECTIVEDATE,
-                       a.FEntryTaxRate     AS FENTRYTAXRATE
+                       a.FEFFECTIVEDATE    AS FEFFECTIVEDATE
                 FROM t_PUR_PriceListEntry a
                 INNER JOIN t_PUR_PriceList b ON a.FID = b.FID
                 WHERE a.FMATERIALID    IN ({0})
@@ -113,16 +103,14 @@ namespace kingdee.CustLI.Business.PlugIn
 
                 decimal? price;
                 if (tax == 1)
-                    price = (row["FTAXPRICE"] == DBNull.Value) ? null : (decimal?)Convert.ToDecimal(row["FTAXPRICE"]);
+                    price = (row["FTAXPRICE"] == DBNull.Value) ? (decimal?)null : Convert.ToDecimal(row["FTAXPRICE"]);
                 else
-                    price = (row["FPRICE"] == DBNull.Value) ? null : (decimal?)Convert.ToDecimal(row["FPRICE"]);
-
-                decimal? taxRate = (row["FENTRYTAXRATE"] == DBNull.Value) ? (decimal?)null : Convert.ToDecimal(row["FENTRYTAXRATE"]);
+                    price = (row["FPRICE"] == DBNull.Value) ? (decimal?)null : Convert.ToDecimal(row["FPRICE"]);
 
                 string key = BuildKey(sup, mat, pt, tax);
                 if (!result.ContainsKey(key))
                 {
-                    result[key] = new PriceQueryResult { Value = price, TaxRate = taxRate };
+                    result[key] = price;
                 }
             }
 

@@ -39,6 +39,8 @@ namespace kingdee.CustLI.Business.PlugIn
         {
             base.BarItemClick(e);
 
+
+
             if (e.BarItemKey != BarItemGetPrice)
                 return;
 
@@ -128,7 +130,7 @@ namespace kingdee.CustLI.Business.PlugIn
                 IncludedTax = r.IncludedTax
             }).ToList();
 
-            Dictionary<string, PriceListQueryHelper.PriceQueryResult> priceMap =
+            Dictionary<string, decimal?> priceMap =
                 PriceListQueryHelper.GetLatestTaxPrice(this.Context, reqs);
 
             int filledCount = 0;
@@ -137,19 +139,20 @@ namespace kingdee.CustLI.Business.PlugIn
                 string key = PriceListQueryHelper.BuildKey(
                     r.SupplierId, r.MaterialId, r.PriceType, r.IncludedTax ? 1 : 0);
 
-                if (!priceMap.TryGetValue(key, out PriceListQueryHelper.PriceQueryResult pr) || !pr.Value.HasValue)
+                if (!priceMap.TryGetValue(key, out decimal? priceValue) || !priceValue.HasValue)
                     continue;
 
                 decimal qty = Convert.ToDecimal(r.Entry["FQty"] ?? 0m);
                 if (qty == 0m)
                     continue;
 
-                decimal priceValue = pr.Value.Value;
-                decimal taxRate = pr.TaxRate ?? 0m;
+                decimal taxRate = Convert.ToDecimal(r.Entry["EntryTaxRate"] ?? 0m);
+
+                decimal rawPrice = priceValue.Value;
 
                 if (r.IncludedTax)
                 {
-                    decimal taxPrice = Math.Round(priceValue, 6);
+                    decimal taxPrice = Math.Round(rawPrice, 6);
                     decimal unitPrice = taxRate > 0m
                         ? Math.Round(taxPrice / (1m + taxRate / 100m), 6)
                         : taxPrice;
@@ -159,7 +162,7 @@ namespace kingdee.CustLI.Business.PlugIn
                 }
                 else
                 {
-                    decimal unitPrice = Math.Round(priceValue, 6);
+                    decimal unitPrice = Math.Round(rawPrice, 6);
                     decimal taxPrice = taxRate > 0m
                         ? Math.Round(unitPrice * (1m + taxRate / 100m), 6)
                         : unitPrice;
@@ -168,7 +171,7 @@ namespace kingdee.CustLI.Business.PlugIn
                     r.Entry["FTaxPrice"] = taxPrice;
                 }
 
-                r.Entry["FEntryTaxRate"] = taxRate;
+                r.Entry["EntryTaxRate"] = taxRate;
 
                 decimal entryTaxPrice = Convert.ToDecimal(r.Entry["FTaxPrice"]);
                 decimal entryPrice = Convert.ToDecimal(r.Entry["FPrice"]);
