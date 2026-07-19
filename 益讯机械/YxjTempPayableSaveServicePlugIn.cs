@@ -1,8 +1,10 @@
 using System;
 using System.ComponentModel;
 using Kingdee.BOS;
+using Kingdee.BOS.Core;
 using Kingdee.BOS.Core.DynamicForm.PlugIn;
 using Kingdee.BOS.Core.DynamicForm.PlugIn.Args;
+using Kingdee.BOS.Core.Validation;
 using Kingdee.BOS.Orm.DataEntity;
 using Kingdee.BOS.Util;
 
@@ -23,36 +25,54 @@ namespace kingdee.CustLI.Business.PlugIn
             e.FieldKeys.Add("FALLAMOUNTFOR_D");
         }
 
-        public override void BeforeExecuteOperationTransaction(BeforeExecuteOperationTransaction e)
+        public override void OnAddValidators(AddValidatorsEventArgs e)
         {
-            base.BeforeExecuteOperationTransaction(e);
+            base.OnAddValidators(e);
+            e.Validators.Insert(0, new PaymentPlanValidator());
+        }
 
-            foreach (DynamicObject bill in e.DataEntitys)
+        private class PaymentPlanValidator : AbstractValidator
+        {
+            public PaymentPlanValidator()
             {
-                string acctType = (bill["FSETACCOUNTTYPE"] == null) ? string.Empty : bill["FSETACCOUNTTYPE"].ToString();
-                if (acctType != AcctTypeTemp)
-                    continue;
+                this.EntityKey = "FBillHead";
+                this.AlwaysValidate = true;
+            }
 
-                var payPlan = bill["AP_PAYABLEPLAN"] as DynamicObjectCollection;
-                if (payPlan == null || payPlan.Count > 0)
-                    continue;
-
-                var entryObjs = bill["AP_PAYABLEENTRY"] as DynamicObjectCollection;
-                if (entryObjs == null || entryObjs.Count == 0)
-                    continue;
-
-                decimal totalAmountFor = 0m;
-                foreach (DynamicObject entry in entryObjs)
+            public override void Validate(
+                ExtendedDataEntity[] dataEntities,
+                ValidateContext validateContext,
+                Context ctx)
+            {
+                foreach (var entity in dataEntities)
                 {
-                    totalAmountFor += Convert.ToDecimal(entry["FALLAMOUNTFOR_D"] ?? 0m);
-                }
+                    DynamicObject bill = entity.DataEntity;
 
-                DynamicObject newPlan = new DynamicObject(payPlan.DynamicCollectionItemPropertyType);
-                newPlan["ENDDATE"] = bill["FENDDATE_H"];
-                newPlan["PAYAMOUNTFOR"] = Math.Round(totalAmountFor, 6);
-                newPlan["FPAYRATE"] = 100m;
-                newPlan["PAYAMOUNT"] = Math.Round(totalAmountFor, 6);
-                payPlan.Add(newPlan);
+                    string acctType = (bill["FSETACCOUNTTYPE"] == null) ? string.Empty : bill["FSETACCOUNTTYPE"].ToString();
+                    if (acctType != YxjTempPayableSaveServicePlugIn.AcctTypeTemp)
+                        continue;
+
+                    var payPlan = bill["AP_PAYABLEPLAN"] as DynamicObjectCollection;
+                    if (payPlan == null || payPlan.Count > 0)
+                        continue;
+
+                    var entryObjs = bill["AP_PAYABLEENTRY"] as DynamicObjectCollection;
+                    if (entryObjs == null || entryObjs.Count == 0)
+                        continue;
+
+                    decimal totalAmountFor = 0m;
+                    foreach (DynamicObject entry in entryObjs)
+                    {
+                        totalAmountFor += Convert.ToDecimal(entry["FALLAMOUNTFOR_D"] ?? 0m);
+                    }
+
+                    DynamicObject newPlan = new DynamicObject(payPlan.DynamicCollectionItemPropertyType);
+                    newPlan["ENDDATE"] = bill["FENDDATE_H"];
+                    newPlan["PAYAMOUNTFOR"] = Math.Round(totalAmountFor, 6);
+                    newPlan["FPAYRATE"] = 100m;
+                    newPlan["PAYAMOUNT"] = Math.Round(totalAmountFor, 6);
+                    payPlan.Add(newPlan);
+                }
             }
         }
     }
