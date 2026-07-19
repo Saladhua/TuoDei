@@ -313,40 +313,41 @@ namespace kingdee.CustLI.Business.PlugIn
                 DBServiceHelper.ExecuteDataSet(this.Context, sb.ToString());
             }
 
-            IOperationResult saveResult = BusinessDataServiceHelper.Save(this.Context, info, dataObjects);
+            //IOperationResult saveResult = BusinessDataServiceHelper.Save(this.Context, info, dataObjects);
 
-            // Step 2 - Save后更新付款计划
-            if (saveResult.IsSuccess)
-            {
-                if (headerTotals.Count > 0)
-                {
-                    var sbPlan = new StringBuilder();
-                    string billIdList = string.Join(",", headerTotals.Keys);
+            //// Step 2 - Save后更新付款计划
+            //if (saveResult.IsSuccess)
+            //{
+            //    if (headerTotals.Count > 0)
+            //    {
+            //        var sbPlan = new StringBuilder();
+            //        string billIdList = string.Join(",", headerTotals.Keys);
 
-                    sbPlan.Append("UPDATE T_AP_PAYABLEPLAN SET ");
-                    sbPlan.Append("FPAYAMOUNTFOR = CASE FID ");
-                    foreach (var kv in headerTotals)
-                        sbPlan.AppendFormat("WHEN {0} THEN {1} ", kv.Key, kv.Value.allAmt.ToString("F2", System.Globalization.CultureInfo.InvariantCulture));
-                    sbPlan.Append("END, ");
-                    sbPlan.Append("FPAYAMOUNT = CASE FID ");
-                    foreach (var kv in headerTotals)
-                        sbPlan.AppendFormat("WHEN {0} THEN {1} ", kv.Key, kv.Value.allAmt.ToString("F2", System.Globalization.CultureInfo.InvariantCulture));
-                    sbPlan.Append("END ");
-                    sbPlan.AppendFormat("WHERE FID IN ({0});", billIdList);
+            //        sbPlan.Append("UPDATE T_AP_PAYABLEPLAN SET ");
+            //        sbPlan.Append("FPAYAMOUNTFOR = CASE FID ");
+            //        foreach (var kv in headerTotals)
+            //            sbPlan.AppendFormat("WHEN {0} THEN {1} ", kv.Key, kv.Value.allAmt.ToString("F2", System.Globalization.CultureInfo.InvariantCulture));
+            //        sbPlan.Append("END, ");
+            //        sbPlan.Append("FPAYAMOUNT = CASE FID ");
+            //        foreach (var kv in headerTotals)
+            //            sbPlan.AppendFormat("WHEN {0} THEN {1} ", kv.Key, kv.Value.allAmt.ToString("F2", System.Globalization.CultureInfo.InvariantCulture));
+            //        sbPlan.Append("END ");
+            //        sbPlan.AppendFormat("WHERE FID IN ({0});", billIdList);
 
-                    DBServiceHelper.ExecuteDataSet(this.Context, sbPlan.ToString());
-                }
+            //        DBServiceHelper.ExecuteDataSet(this.Context, sbPlan.ToString());
+            //    }
 
-                this.View.Refresh();
-                this.View.ShowMessage(string.Format("已成功为 {0} 行获取价目表价格并保存。", filledCount));
-            }
-            else
-            {
-                FormatOperateResultValidationInfo(saveResult);
-                this.View.ShowOperateResult(saveResult.OperateResult);
-            }
+            //    this.View.Refresh();
+            //    this.View.ShowMessage(string.Format("已成功为 {0} 行获取价目表价格并保存。", filledCount));
+            //}
+            //else
+            //{
+            //    FormatOperateResultValidationInfo(saveResult);
+            //    this.View.ShowOperateResult(saveResult.OperateResult);
+            //}
 
-
+            this.View.Refresh();
+            this.View.ShowMessage(string.Format("已成功为 {0} 行获取价目表价格并保存。", filledCount));
         }
 
         protected virtual void FormatOperateResultValidationInfo(IOperationResult result)
