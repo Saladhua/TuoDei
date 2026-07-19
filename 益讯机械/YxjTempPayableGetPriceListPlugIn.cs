@@ -224,9 +224,9 @@ namespace kingdee.CustLI.Business.PlugIn
                     r.Entry["FALLAMOUNTFOR_D"] = allAmt;
                     r.Entry["FNoTaxAmountFor_D"] = noTaxAmt;
                     r.Entry["FTAXAMOUNTFOR_D"] = taxAmt;
-                    r.Entry["FALLAMOUNT"] = allAmt;
-                    r.Entry["FNOTAXAMOUNT"] = noTaxAmt;
-                    r.Entry["FTAXAMOUNT"] = taxAmt;
+                    r.Entry["ALLAMOUNT"] = allAmt;
+                    r.Entry["NOTAXAMOUNT"] = noTaxAmt;
+                    r.Entry["FTAXAMOUNT_D"] = taxAmt;
 
                     long entryId = Convert.ToInt64(r.Entry["Id"]);
                     entryUpdates[entryId] = (
