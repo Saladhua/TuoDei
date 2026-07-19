@@ -142,7 +142,7 @@ namespace kingdee.CustLI.Business.PlugIn
                 if (!priceMap.TryGetValue(key, out decimal? priceValue) || !priceValue.HasValue)
                     continue;
 
-                decimal qty = Convert.ToDecimal(r.Entry["FPRICEQTY"] ?? 0m);
+                decimal qty = Convert.ToDecimal(r.Entry["PriceQty"] ?? 0m);
                 if (qty == 0m)
                     continue;
 
@@ -157,7 +157,7 @@ namespace kingdee.CustLI.Business.PlugIn
                         ? Math.Round(taxPrice / (1m + taxRate / 100m), 6)
                         : taxPrice;
 
-                    r.Entry["FTaxPrice"] = taxPrice;
+                    r.Entry["TaxPrice"] = taxPrice;
                     r.Entry["FPrice"] = unitPrice;
                 }
                 else
@@ -168,15 +168,15 @@ namespace kingdee.CustLI.Business.PlugIn
                         : unitPrice;
 
                     r.Entry["FPrice"] = unitPrice;
-                    r.Entry["FTaxPrice"] = taxPrice;
+                    r.Entry["TaxPrice"] = taxPrice;
                 }
 
                 r.Entry["EntryTaxRate"] = taxRate;
 
-                decimal entryTaxPrice = Convert.ToDecimal(r.Entry["FTaxPrice"]);
+                decimal entryTaxPrice = Convert.ToDecimal(r.Entry["TaxPrice"]);
                 decimal entryPrice = Convert.ToDecimal(r.Entry["FPrice"]);
-                r.Entry["FAmount"] = Math.Round(qty * entryTaxPrice, 6);
-                r.Entry["FTaxAmount"] = Math.Round(qty * (entryTaxPrice - entryPrice), 6);
+                r.Entry["FALLAMOUNTFOR_D"] = Math.Round(qty * entryTaxPrice, 6);
+                r.Entry["FTAXAMOUNTFOR_D"] = Math.Round(qty * (entryTaxPrice - entryPrice), 6);
 
                 changedBills.Add(r.Bill);
                 filledCount++;
@@ -192,17 +192,17 @@ namespace kingdee.CustLI.Business.PlugIn
 
                 foreach (DynamicObject entry in entryObjs)
                 {
-                    headAmount += Convert.ToDecimal(entry["FAmount"] ?? 0m);
-                    headTaxAmount += Convert.ToDecimal(entry["FTaxAmount"] ?? 0m);
+                    headAmount += Convert.ToDecimal(entry["Amount"] ?? 0m);
+                    headTaxAmount += Convert.ToDecimal(entry["TaxAmount"] ?? 0m);
                 }
 
-                bill["FALLAMOUNT"] = Math.Round(headAmount, 6);
+                bill["ALLAMOUNT"] = Math.Round(headAmount, 6);
 
                 decimal headAmountFor = Math.Round(headAmount, 6);
                 decimal headTaxAmountFor = Math.Round(headTaxAmount, 6);
-                bill["FALLAMOUNTFOR"] = headAmountFor;
-                bill["FTAXAMOUNTFOR"] = headTaxAmountFor;
-                bill["FPRICEFOR"] = Math.Round(headAmountFor - headTaxAmountFor, 6);
+                bill["ALLAMOUNTFOR"] = headAmountFor;
+                bill["TAXAMOUNTFOR"] = headTaxAmountFor;
+                bill["PRICEFOR"] = Math.Round(headAmountFor - headTaxAmountFor, 6);
 
                 var payPlan = bill["AP_PAYABLEPLAN"] as DynamicObjectCollection;
                 if (payPlan != null)
