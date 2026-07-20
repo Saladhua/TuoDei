@@ -280,32 +280,38 @@ namespace kingdee.CustLI.Business.PlugInWebApi
             return 0m;
         }
 
-        private (long fid, long fentryId) GetMoIds(string moBillNo)
+        private (long fid, long fentryId) GetMoIds(string moBillNo, string materialNumber)
         {
-            string url = string.Concat(CloudUrl, "Kingdee.BOS.WebApi.ServicesStub.DynamicFormService.View.common.kdsvc");
+            string url = string.Concat(CloudUrl, "Kingdee.BOS.WebApi.ServicesStub.DynamicFormService.ExecuteBillQuery.common.kdsvc");
+
+            string safeMoNo = (moBillNo ?? "").Replace("'", "''");
+            string safeMat = (materialNumber ?? "").Replace("'", "''");
+
+            JObject queryParam = new JObject();
+            queryParam.Add("FormId", "PRD_MO");
+            queryParam.Add("FieldKeys", "FID,FTreeEntity_FEntryID,FTreeEntity_FSeq");
+            queryParam.Add("FilterString", "FBillNo = '" + safeMoNo + "' AND FMaterialId.FNumber = '" + safeMat + "'");
+            queryParam.Add("OrderString", "FTreeEntity_FSeq ASC");
+            queryParam.Add("TopRowCount", 0);
+            queryParam.Add("StartRow", 0);
+            queryParam.Add("Limit", 0);
+
             List<object> parameters = new List<object>();
-            parameters.Add("PRD_MO");
-            parameters.Add(JsonConvert.SerializeObject(new
-            {
-                Number = moBillNo,
-                IsGetBaseDataField = false,
-                IsSortBySeq = false
-            }));
+            parameters.Add(JsonConvert.SerializeObject(queryParam));
             string rawResult = HttpPost(url, JsonConvert.SerializeObject(parameters));
 
             try
             {
-                JObject result = JObject.Parse(rawResult);
-                JObject bill = result["Result"] as JObject;
-                if (bill == null) return (0, 0);
+                JArray rows = JArray.Parse(rawResult);
+                if (rows == null || rows.Count == 0) return (0, 0);
+
+                JArray first = rows[0] as JArray;
+                if (first == null || first.Count < 2) return (0, 0);
 
                 long fid = 0;
-                if (bill["Id"] != null) long.TryParse(bill["Id"].ToString(), out fid);
-
                 long fentryId = 0;
-                JArray entity = bill["FEntity"] as JArray;
-                if (entity != null && entity.Count > 0 && entity[0]["FEntryID"] != null)
-                    long.TryParse(entity[0]["FEntryID"].ToString(), out fentryId);
+                long.TryParse(first[0] != null ? first[0].ToString() : "", out fid);
+                long.TryParse(first[1] != null ? first[1].ToString() : "", out fentryId);
 
                 return (fid, fentryId);
             }
@@ -387,7 +393,7 @@ namespace kingdee.CustLI.Business.PlugInWebApi
                         JObject jo = item as JObject;
                         string moBillNo = jo != null && jo["FSrcBillNo"] != null ? jo["FSrcBillNo"].ToString() : "";
                         string materialNumber = jo != null && jo["FMaterialNumber"] != null ? jo["FMaterialNumber"].ToString() : "";
-                        var (moFid, _) = GetMoIds(moBillNo);
+                        var (moFid, _) = GetMoIds(moBillNo, materialNumber);
                         if (moFid <= 0)
                         {
                             return "FSrcBillNo=" + moBillNo + "（物料 " + materialNumber + "）对应的生产订单在账套中不存在，无法生成生产入库单";
@@ -424,7 +430,7 @@ namespace kingdee.CustLI.Business.PlugInWebApi
             string stockNumber = item["FStockNumber"]?.ToString() ?? "";
             string lot = item["FLot"]?.ToString() ?? "";
 
-            var (moFid, moEntryId) = GetMoIds(moBillNo);
+            var (moFid, moEntryId) = GetMoIds(moBillNo, materialNumber);
 
             JObject model = new JObject();
             AddField(model, "FBillType", Creat_JsonChildObject("FNUMBER", "SCRKD02_SYS"));
