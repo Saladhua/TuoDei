@@ -6,34 +6,38 @@
  * ──────────────────────────────────────────
  *   http://127.0.0.1/k3cloud/kingdee.CustLI.Business.PlugInWebApi.FeYBatchSave.ExecuteService,kingdee.CustLI.Business.PlugIn.common.kdsvc
  *
- *   请求体示例（生产入库单 — PRD_INSTOCK）：
+ *   请求体示例（生产入库单 — PRD_INSTOCK），整体包在 request 节点下：
  *   {
- *     "DBID": "6979e702b71b4c",
- *     "UserName": "kd01",
- *     "Password": "123qwe..",
- *     "FormId": "PRD_INSTOCK",
- *     "DataList": [
- *       {
- *         "FMaterialNumber": "3.3.2.6.1",
- *         "FSrcBillNo": "MO2026070001",
- *         "FLot": "20260701-01",
- *         "FQty": 100,
- *         "FStockNumber": "19"
- *       },
- *       {
- *         "FMaterialNumber": "3.3.2.6.1",
- *         "FSrcBillNo": "MO2026070002",
- *         "FLot": "20260701-02",
- *         "FQty": 200,
- *         "FStockNumber": "20"
- *       }
- *     ]
+ *     "request": {
+ *       "DBID": "6979e702b71b4c",
+ *       "UserName": "kd01",
+ *       "Password": "123qwe..",
+ *       "FormId": "PRD_INSTOCK",
+ *       "DataList": [
+ *         {
+ *           "FMaterialNumber": "3.3.2.6.1",
+ *           "FSrcBillNo": "MO2026070001",
+ *           "FLot": "20260701-01",
+ *           "FQty": 100,
+ *           "FStockNumber": "19"
+ *         },
+ *         {
+ *           "FMaterialNumber": "3.3.2.6.1",
+ *           "FSrcBillNo": "MO2026070002",
+ *           "FLot": "20260701-02",
+ *           "FQty": 200,
+ *           "FStockNumber": "20"
+ *         }
+ *       ]
+ *     }
  *   }
  *
  *   说明：
+ *   - 请求体固定包在 request 节点下（{ "request": { ... } }）
  *   - DBID（账套Id/DataCenterId）由外部请求体传入，接口先用 DBID+UserName+Password
  *     调用 AuthService.ValidateUser 登录鉴权，账套上下文通过登录 Cookie 透传至后续 BatchSave 调用
  *   - UserName / Password 为用户登录账号密码，鉴权失败时返回错误
+ *   - DataList 中任一物料 FQty<=0 或 FMaterialNumber 为空时整体拦截，返回所有异常物料清单
  *
  * ──────────────────────────────────────────
  * 二、支持的单据类型（通过 FormId 区分）
@@ -152,6 +156,11 @@ namespace kingdee.CustLI.Business.PlugInWebApi
         {
             try
             {
+                if (request["request"] != null)
+                {
+                    request = request["request"] as JObject ?? request;
+                }
+
                 _dbId = request["DBID"] != null ? request["DBID"].ToString() : "";
                 _userName = request["UserName"] != null ? request["UserName"].ToString() : "";
                 _password = request["Password"] != null ? request["Password"].ToString() : "";
@@ -181,6 +190,12 @@ namespace kingdee.CustLI.Business.PlugInWebApi
                 if (dataList == null || dataList.Count == 0)
                 {
                     return BuildResult(false, "DataList 不能为空", 0, 0, new JArray());
+                }
+
+                string qtyCheckMsg = ValidateDataList(dataList);
+                if (!string.IsNullOrEmpty(qtyCheckMsg))
+                {
+                    return BuildResult(false, qtyCheckMsg, 0, 0, new JArray());
                 }
 
                 string batchJson = BuildBatchSaveJson(formId, dataList);
@@ -221,6 +236,44 @@ namespace kingdee.CustLI.Business.PlugInWebApi
             {
                 throw new Exception("登录鉴权异常: " + e.Message);
             }
+        }
+
+        private string ValidateDataList(JArray dataList)
+        {
+            List<string> errors = new List<string>();
+            for (int i = 0; i < dataList.Count; i++)
+            {
+                JObject item = dataList[i] as JObject;
+                if (item == null) continue;
+
+                string materialNumber = item["FMaterialNumber"] != null ? item["FMaterialNumber"].ToString() : "";
+                if (string.IsNullOrEmpty(materialNumber))
+                {
+                    errors.Add("第" + (i + 1) + "行 物料编号为空");
+                    continue;
+                }
+
+                decimal qty = ParseQty(item["FQty"]);
+                if (qty <= 0)
+                {
+                    errors.Add("FMaterialNumber=" + materialNumber + " 的数量为0或无效");
+                }
+            }
+
+            if (errors.Count == 0) return "";
+
+            return "存在数量为0或无效的物料：" + string.Join("；", errors);
+        }
+
+        private decimal ParseQty(JToken qtyToken)
+        {
+            if (qtyToken == null) return 0m;
+            decimal q;
+            if (decimal.TryParse(qtyToken.ToString(), out q))
+            {
+                return q;
+            }
+            return 0m;
         }
 
         private (long fid, long fentryId) GetMoIds(string moBillNo)
@@ -355,7 +408,7 @@ namespace kingdee.CustLI.Business.PlugInWebApi
         {
             string moBillNo = item["FSrcBillNo"]?.ToString() ?? "";
             string materialNumber = item["FMaterialNumber"]?.ToString() ?? "";
-            decimal qty = Convert.ToDecimal(item["FQty"] ?? 0);
+            decimal qty = ParseQty(item["FQty"]);
             string stockNumber = item["FStockNumber"]?.ToString() ?? "";
             string lot = item["FLot"]?.ToString() ?? "";
 
@@ -451,7 +504,7 @@ namespace kingdee.CustLI.Business.PlugInWebApi
             entry.Add("FSrcStockId", Creat_JsonChildObject("FNumber", item["FSrcStockNumber"] != null ? item["FSrcStockNumber"].ToString() : ""));
             entry.Add("FDestStockId", Creat_JsonChildObject("FNumber", item["FDestStockNumber"] != null ? item["FDestStockNumber"].ToString() : ""));
             entry.Add("FLot", item["FLot"] != null ? item["FLot"].ToString() : "");
-            entry.Add("FQty", Convert.ToDecimal(item["FQty"] ?? 0));
+            entry.Add("FQty", ParseQty(item["FQty"]));
             entryArr.Add(entry);
 
             model.Add("FEntity", entryArr);
@@ -474,7 +527,7 @@ namespace kingdee.CustLI.Business.PlugInWebApi
             entry.Add("FSrcStockId", Creat_JsonChildObject("FNumber", item["FSrcStockNumber"] != null ? item["FSrcStockNumber"].ToString() : ""));
             entry.Add("FDestStockId", Creat_JsonChildObject("FNumber", "21"));
             entry.Add("FLot", item["FLot"] != null ? item["FLot"].ToString() : "");
-            entry.Add("FQty", Convert.ToDecimal(item["FQty"] ?? 0));
+            entry.Add("FQty", ParseQty(item["FQty"]));
             entryArr.Add(entry);
 
             model.Add("FEntity", entryArr);
