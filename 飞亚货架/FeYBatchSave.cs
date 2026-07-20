@@ -630,7 +630,7 @@ namespace kingdee.CustLI.Business.PlugInWebApi
                     {
                         foreach (var se in successEntities)
                         {
-                            if (se["DIndex"] != null && Convert.ToInt32(se["DIndex"]) == i)
+                            if (se["DIndex"] != null && se["DIndex"].Value<int>() == i)
                             {
                                 detail["Success"] = true;
                                 detail["BillNo"] = se["Number"] != null ? se["Number"].ToString() : "";
@@ -645,7 +645,7 @@ namespace kingdee.CustLI.Business.PlugInWebApi
                     {
                         foreach (var err in errors)
                         {
-                            if (err["DIndex"] != null && Convert.ToInt32(err["DIndex"]) == i)
+                            if (err["DIndex"] != null && err["DIndex"].Value<int>() == i)
                             {
                                 detail["Message"] = err["Message"] != null ? err["Message"].ToString() : "";
                                 break;
