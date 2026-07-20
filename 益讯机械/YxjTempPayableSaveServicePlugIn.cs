@@ -26,7 +26,7 @@ namespace kingdee.CustLI.Business.PlugIn
             e.FieldKeys.Add("AP_PAYABLEPLAN");
             e.FieldKeys.Add("AP_PAYABLEENTRY");
             e.FieldKeys.Add("FALLAMOUNTFOR_D");
-            e.FieldKeys.Add("FPAYCONDITION_ID");
+            e.FieldKeys.Add("FPAYCONDITION");
             e.FieldKeys.Add("FORDERNUMBER");
             e.FieldKeys.Add("FPURCHASEORDERNO");
         }
@@ -78,9 +78,10 @@ namespace kingdee.CustLI.Business.PlugIn
                     newPlan["FPAYRATE"] = 100m;
                     newPlan["PAYAMOUNT"] = Math.Round(totalAmountFor, 6);
 
-                    long payConditionId = 0;
-                    if (bill["FPAYCONDITION_ID"] != null && long.TryParse(bill["FPAYCONDITION_ID"].ToString(), out payConditionId))
+                    var payConditionObj = bill["FPAYCONDITION"] as DynamicObject;
+                    if (payConditionObj != null)
                     {
+                        long payConditionId = Convert.ToInt64(payConditionObj["Id"]);
                         string sql = $"SELECT FPAYMENTMETHOD FROM T_BD_PaymentCondition WHERE FID = {payConditionId}";
                         DataSet ds = DBServiceHelper.ExecuteDataSet(ctx, sql);
                         if (ds != null && ds.Tables.Count > 0 && ds.Tables[0].Rows.Count > 0)
