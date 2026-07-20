@@ -591,8 +591,14 @@ namespace kingdee.CustLI.Business.PlugInWebApi
                 JObject rawJson = ResolveKdResponse(rawResult);
                 if (rawJson == null)
                 {
-                    result["Message"] = "金蝶返回结果解析失败，原文：" + rawResult;
-                    result["Data"]["RawResponse"] = rawResult;
+                    result["Message"] = "操作完成，成功0条，失败" + totalCount + "条";
+                    JObject errDetail = new JObject();
+                    errDetail["Index"] = 0;
+                    errDetail["Success"] = false;
+                    errDetail["BillNo"] = "";
+                    errDetail["Id"] = "";
+                    errDetail["Message"] = "金蝶返回结果解析失败";
+                    ((JArray)result["Data"]["Details"]).Add(errDetail);
                     return result;
                 }
 
@@ -614,13 +620,6 @@ namespace kingdee.CustLI.Business.PlugInWebApi
                 JArray errors = responseStatus != null && responseStatus["Errors"] != null
                     ? responseStatus["Errors"] as JArray
                     : new JArray();
-
-                List<string> errorMessages = new List<string>();
-                foreach (var err in errors)
-                {
-                    string msg = err["Message"] != null ? err["Message"].ToString() : "";
-                    if (!string.IsNullOrEmpty(msg)) errorMessages.Add(msg);
-                }
 
                 int maxItems = Math.Max(
                     successEntities != null ? successEntities.Count : 0,
@@ -677,19 +676,22 @@ namespace kingdee.CustLI.Business.PlugInWebApi
                     }
                 }
 
-                result["Message"] = (isSuccess ? "操作完成，成功" + successCount + "条" : "金蝶返回失败")
-                    + (errorMessages.Count > 0 ? "：" + string.Join("；", errorMessages) : "");
+                result["Message"] = "操作完成，成功" + successCount + "条，失败" + failCount + "条";
                 result["Data"]["SuccessCount"] = successCount;
                 result["Data"]["FailCount"] = failCount;
                 result["Data"]["Details"] = details;
                 result["Success"] = isSuccess && failCount == 0;
-                result["Data"]["RawResponse"] = rawResult;
             }
             catch (Exception mapEx)
             {
-                result["Message"] = "结果映射异常：" + mapEx.Message;
-                result["Data"]["RawResponse"] = rawResult;
-                result["Data"]["Details"] = new JArray();
+                result["Message"] = "操作完成，成功0条，失败" + totalCount + "条";
+                JObject errDetail2 = new JObject();
+                errDetail2["Index"] = 0;
+                errDetail2["Success"] = false;
+                errDetail2["BillNo"] = "";
+                errDetail2["Id"] = "";
+                errDetail2["Message"] = "结果映射异常：" + mapEx.Message;
+                result["Data"]["Details"] = new JArray(errDetail2);
             }
 
             return result;
