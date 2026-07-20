@@ -59,9 +59,8 @@ namespace kingdee.CustLI.Business.PlugIn
                         continue;
 
                     var payPlan = bill["AP_PAYABLEPLAN"] as DynamicObjectCollection;
-                    if (payPlan == null)
+                    if (payPlan == null || payPlan.Count > 0)
                         continue;
-                    payPlan.Clear();
 
                     var entryObjs = bill["AP_PAYABLEENTRY"] as DynamicObjectCollection;
                     if (entryObjs == null || entryObjs.Count == 0)
