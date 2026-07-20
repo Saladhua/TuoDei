@@ -203,6 +203,10 @@ namespace kingdee.CustLI.Business.PlugInWebApi
                 {
                     return BuildResult(false, "不支持的 FormId: " + formId, 0, 0, new JArray());
                 }
+                if (!batchJson.TrimStart().StartsWith("{"))
+                {
+                    return BuildResult(false, batchJson, 0, 0, new JArray());
+                }
 
                 string rawResult = BatchSaveCall(formId, batchJson);
                 return MapBatchSaveResult(rawResult, dataList.Count);
@@ -380,7 +384,15 @@ namespace kingdee.CustLI.Business.PlugInWebApi
                 case "PRD_INSTOCK":
                     foreach (var item in dataList)
                     {
-                        modelArr.Add(BuildPrdInstockModel(item as JObject));
+                        JObject jo = item as JObject;
+                        string moBillNo = jo != null && jo["FSrcBillNo"] != null ? jo["FSrcBillNo"].ToString() : "";
+                        string materialNumber = jo != null && jo["FMaterialNumber"] != null ? jo["FMaterialNumber"].ToString() : "";
+                        var (moFid, _) = GetMoIds(moBillNo);
+                        if (moFid <= 0)
+                        {
+                            return "FSrcBillNo=" + moBillNo + "（物料 " + materialNumber + "）对应的生产订单在账套中不存在，无法生成生产入库单";
+                        }
+                        modelArr.Add(BuildPrdInstockModel(jo));
                     }
                     break;
                 case "STK_TransferDirect_In":
@@ -554,11 +566,18 @@ namespace kingdee.CustLI.Business.PlugInWebApi
 
         private JObject MapBatchSaveResult(string rawResult, int totalCount)
         {
-            JObject result = BuildResult(true, "操作完成", totalCount, 0, new JArray());
+            JObject result = BuildResult(false, "操作未完成", 0, 0, new JArray());
 
             try
             {
-                JObject rawJson = JObject.Parse(rawResult);
+                JObject rawJson = ResolveKdResponse(rawResult);
+                if (rawJson == null)
+                {
+                    result["Message"] = "金蝶返回结果解析失败，原文：" + rawResult;
+                    result["Data"]["RawResponse"] = rawResult;
+                    return result;
+                }
+
                 JObject responseStatus = rawJson["Result"] != null && rawJson["Result"]["ResponseStatus"] != null
                     ? rawJson["Result"]["ResponseStatus"] as JObject
                     : rawJson["ResponseStatus"] as JObject;
@@ -567,6 +586,9 @@ namespace kingdee.CustLI.Business.PlugInWebApi
                 int successCount = 0;
                 int failCount = 0;
 
+                bool isSuccess = responseStatus != null && responseStatus["IsSuccess"] != null
+                    && responseStatus["IsSuccess"].Value<bool>();
+
                 JArray successEntities = responseStatus != null && responseStatus["SuccessEntities"] != null
                     ? responseStatus["SuccessEntities"] as JArray
                     : new JArray();
@@ -574,6 +596,13 @@ namespace kingdee.CustLI.Business.PlugInWebApi
                 JArray errors = responseStatus != null && responseStatus["Errors"] != null
                     ? responseStatus["Errors"] as JArray
                     : new JArray();
+
+                List<string> errorMessages = new List<string>();
+                foreach (var err in errors)
+                {
+                    string msg = err["Message"] != null ? err["Message"].ToString() : "";
+                    if (!string.IsNullOrEmpty(msg)) errorMessages.Add(msg);
+                }
 
                 int maxItems = Math.Max(
                     successEntities != null ? successEntities.Count : 0,
@@ -630,11 +659,13 @@ namespace kingdee.CustLI.Business.PlugInWebApi
                     }
                 }
 
-                result["Message"] = "操作完成，成功" + successCount + "条，失败" + failCount + "条";
+                result["Message"] = (isSuccess ? "操作完成，成功" + successCount + "条" : "金蝶返回失败")
+                    + (errorMessages.Count > 0 ? "：" + string.Join("；", errorMessages) : "");
                 result["Data"]["SuccessCount"] = successCount;
                 result["Data"]["FailCount"] = failCount;
                 result["Data"]["Details"] = details;
-                result["Success"] = failCount == 0;
+                result["Success"] = isSuccess && failCount == 0;
+                result["Data"]["RawResponse"] = rawResult;
             }
             catch
             {
@@ -642,6 +673,31 @@ namespace kingdee.CustLI.Business.PlugInWebApi
             }
 
             return result;
+        }
+
+        private JObject ResolveKdResponse(string rawResult)
+        {
+            if (string.IsNullOrEmpty(rawResult)) return null;
+
+            try
+            {
+                if (rawResult.TrimStart().StartsWith("["))
+                {
+                    JArray arr = JArray.Parse(rawResult);
+                    JToken inner = arr;
+                    while (inner is JArray && ((JArray)inner).Count > 0)
+                    {
+                        inner = ((JArray)inner)[0];
+                    }
+                    if (inner is JObject) return inner as JObject;
+                    return null;
+                }
+                return JObject.Parse(rawResult);
+            }
+            catch
+            {
+                return null;
+            }
         }
 
         private JObject BuildResult(bool success, string message, int successCount, int failCount, JArray details)
