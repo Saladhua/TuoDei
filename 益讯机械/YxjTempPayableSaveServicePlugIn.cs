@@ -59,8 +59,9 @@ namespace kingdee.CustLI.Business.PlugIn
                         continue;
 
                     var payPlan = bill["AP_PAYABLEPLAN"] as DynamicObjectCollection;
-                    if (payPlan == null || payPlan.Count > 0)
+                    if (payPlan == null)
                         continue;
+                    payPlan.Clear();
 
                     var entryObjs = bill["AP_PAYABLEENTRY"] as DynamicObjectCollection;
                     if (entryObjs == null || entryObjs.Count == 0)
@@ -78,7 +79,7 @@ namespace kingdee.CustLI.Business.PlugIn
                     newPlan["FPAYRATE"] = 100m;
                     newPlan["PAYAMOUNT"] = Math.Round(totalAmountFor, 6);
 
-                    var payConditionObj = bill["FPAYCONDITION"] as DynamicObject;
+                    var payConditionObj = bill["PayConditon"] as DynamicObject;
                     if (payConditionObj != null)
                     {
                         long payConditionId = Convert.ToInt64(payConditionObj["Id"]);
