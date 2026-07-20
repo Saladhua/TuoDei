@@ -373,8 +373,8 @@ namespace kingdee.CustLI.Business.PlugInWebApi
             batchObj.Add("NeedReturnFields", new JArray());
             batchObj.Add("IsDeleteEntry", "true");
             batchObj.Add("SubSystemId", "");
-            batchObj.Add("IsVerifyBaseDataField", "false");
-            batchObj.Add("IsEntryBatchFill", "true");
+            batchObj.Add("IsVerifyBaseDataField", "true");
+            batchObj.Add("IsEntryBatchFill", "false");
             batchObj.Add("ValidateFlag", "true");
             batchObj.Add("NumberSearch", "true");
             batchObj.Add("IsAutoAdjustField", "false");
