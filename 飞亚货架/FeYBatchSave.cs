@@ -471,7 +471,7 @@ namespace kingdee.CustLI.Business.PlugInWebApi
             AddField(entry, "FMOMAINENTRYID", moEntryId);
             AddField(entry, "FKeeperTypeId", "BD_KeeperOrg");
             AddField(entry, "FKeeperId", Creat_JsonChildObject("FNumber", "100"));
-            AddField(entry, "FLot", lot);
+            AddField(entry, "FLot", Creat_JsonChildObject("FNumber", lot));
 
             JArray linkArr = new JArray();
             JObject link = new JObject();
@@ -521,7 +521,7 @@ namespace kingdee.CustLI.Business.PlugInWebApi
             entry.Add("FMaterialId", Creat_JsonChildObject("FNumber", item["FMaterialNumber"] != null ? item["FMaterialNumber"].ToString() : ""));
             entry.Add("FSrcStockId", Creat_JsonChildObject("FNumber", item["FSrcStockNumber"] != null ? item["FSrcStockNumber"].ToString() : ""));
             entry.Add("FDestStockId", Creat_JsonChildObject("FNumber", item["FDestStockNumber"] != null ? item["FDestStockNumber"].ToString() : ""));
-            entry.Add("FLot", item["FLot"] != null ? item["FLot"].ToString() : "");
+            entry.Add("FLot", Creat_JsonChildObject("FNumber", item["FLot"] != null ? item["FLot"].ToString() : ""));
             entry.Add("FQty", ParseQty(item["FQty"]));
             entryArr.Add(entry);
 
@@ -544,7 +544,7 @@ namespace kingdee.CustLI.Business.PlugInWebApi
             entry.Add("FMaterialId", Creat_JsonChildObject("FNumber", item["FMaterialNumber"] != null ? item["FMaterialNumber"].ToString() : ""));
             entry.Add("FSrcStockId", Creat_JsonChildObject("FNumber", item["FSrcStockNumber"] != null ? item["FSrcStockNumber"].ToString() : ""));
             entry.Add("FDestStockId", Creat_JsonChildObject("FNumber", "21"));
-            entry.Add("FLot", item["FLot"] != null ? item["FLot"].ToString() : "");
+            entry.Add("FLot", Creat_JsonChildObject("FNumber", item["FLot"] != null ? item["FLot"].ToString() : ""));
             entry.Add("FQty", ParseQty(item["FQty"]));
             entryArr.Add(entry);
 
@@ -673,8 +673,10 @@ namespace kingdee.CustLI.Business.PlugInWebApi
                 result["Success"] = isSuccess && failCount == 0;
                 result["Data"]["RawResponse"] = rawResult;
             }
-            catch
+            catch (Exception mapEx)
             {
+                result["Message"] = "结果映射异常：" + mapEx.Message;
+                result["Data"]["RawResponse"] = rawResult;
                 result["Data"]["Details"] = new JArray();
             }
 
