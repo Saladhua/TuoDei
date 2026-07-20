@@ -613,8 +613,8 @@ namespace kingdee.CustLI.Business.PlugInWebApi
                 bool isSuccess = responseStatus != null && responseStatus["IsSuccess"] != null
                     && responseStatus["IsSuccess"].Value<bool>();
 
-                JArray successEntities = responseStatus != null && responseStatus["SuccessEntities"] != null
-                    ? responseStatus["SuccessEntities"] as JArray
+                JArray successEntities = responseStatus != null && responseStatus["SuccessEntitys"] != null
+                    ? responseStatus["SuccessEntitys"] as JArray
                     : new JArray();
 
                 JArray errors = responseStatus != null && responseStatus["Errors"] != null
