@@ -373,8 +373,8 @@ namespace kingdee.CustLI.Business.PlugInWebApi
             batchObj.Add("NeedReturnFields", new JArray());
             batchObj.Add("IsDeleteEntry", "true");
             batchObj.Add("SubSystemId", "");
-            batchObj.Add("IsVerifyBaseDataField", "true");
-            batchObj.Add("IsEntryBatchFill", "false");
+            batchObj.Add("IsVerifyBaseDataField", "false");
+            batchObj.Add("IsEntryBatchFill", "true");
             batchObj.Add("ValidateFlag", "true");
             batchObj.Add("NumberSearch", "true");
             batchObj.Add("IsAutoAdjustField", "false");
@@ -418,7 +418,7 @@ namespace kingdee.CustLI.Business.PlugInWebApi
             }
 
             batchObj.Add("Model", modelArr);
-            batchObj.Add("BatchCount", Math.Min(dataList.Count, 5));
+            batchObj.Add("BatchCount", 5);
             return JsonConvert.SerializeObject(batchObj);
         }
 
@@ -440,6 +440,8 @@ namespace kingdee.CustLI.Business.PlugInWebApi
             AddField(model, "FOwnerTypeId0", "BD_OwnerOrg");
             AddField(model, "FOwnerId0", Creat_JsonChildObject("FNumber", "100"));
             AddField(model, "FCurrId", Creat_JsonChildObject("FNumber", "PRE001"));
+            model.Add("FIsEntrust", JToken.FromObject(false));
+            model.Add("FEntrustInStockId", JToken.FromObject(0));
 
             JArray entryArr = new JArray();
             JObject entry = new JObject();
@@ -472,6 +474,16 @@ namespace kingdee.CustLI.Business.PlugInWebApi
             AddField(entry, "FKeeperTypeId", "BD_KeeperOrg");
             AddField(entry, "FKeeperId", Creat_JsonChildObject("FNumber", "100"));
             AddField(entry, "FLot", Creat_JsonChildObject("FNumber", lot));
+            entry.Add("FIsNew", JToken.FromObject(false));
+            entry.Add("FCheckProduct", JToken.FromObject(false));
+            AddField(entry, "FProductType", "1");
+            AddField(entry, "FInStockType", "1");
+            AddField(entry, "FISBACKFLUSH", true);
+            entry.Add("FSecRealQty", JToken.FromObject(0.0));
+            entry.Add("FIsFinished", JToken.FromObject(false));
+            entry.Add("FSelReStkQty", JToken.FromObject(0.0));
+            entry.Add("FBaseSelReStkQty", JToken.FromObject(0.0));
+            entry.Add("FIsOverLegalOrg", JToken.FromObject(false));
 
             JArray linkArr = new JArray();
             JObject link = new JObject();
