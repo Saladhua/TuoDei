@@ -1,11 +1,14 @@
 using System;
 using System.ComponentModel;
+using System.Data;
+using System.Linq;
 using Kingdee.BOS;
 using Kingdee.BOS.Core;
 using Kingdee.BOS.Core.DynamicForm.PlugIn;
 using Kingdee.BOS.Core.DynamicForm.PlugIn.Args;
 using Kingdee.BOS.Core.Validation;
 using Kingdee.BOS.Orm.DataEntity;
+using Kingdee.BOS.ServiceHelper;
 using Kingdee.BOS.Util;
 
 namespace kingdee.CustLI.Business.PlugIn
@@ -23,6 +26,9 @@ namespace kingdee.CustLI.Business.PlugIn
             e.FieldKeys.Add("AP_PAYABLEPLAN");
             e.FieldKeys.Add("AP_PAYABLEENTRY");
             e.FieldKeys.Add("FALLAMOUNTFOR_D");
+            e.FieldKeys.Add("FPAYCONDITION_ID");
+            e.FieldKeys.Add("FORDERNUMBER");
+            e.FieldKeys.Add("FPURCHASEORDERNO");
         }
 
         public override void OnAddValidators(AddValidatorsEventArgs e)
@@ -71,6 +77,23 @@ namespace kingdee.CustLI.Business.PlugIn
                     newPlan["PAYAMOUNTFOR"] = Math.Round(totalAmountFor, 6);
                     newPlan["FPAYRATE"] = 100m;
                     newPlan["PAYAMOUNT"] = Math.Round(totalAmountFor, 6);
+
+                    long payConditionId = 0;
+                    if (bill["FPAYCONDITION_ID"] != null && long.TryParse(bill["FPAYCONDITION_ID"].ToString(), out payConditionId))
+                    {
+                        string sql = $"SELECT FPAYMENTMETHOD FROM T_BD_PaymentCondition WHERE FID = {payConditionId}";
+                        DataSet ds = DBServiceHelper.ExecuteDataSet(ctx, sql);
+                        if (ds != null && ds.Tables.Count > 0 && ds.Tables[0].Rows.Count > 0)
+                        {
+                            int paymentMethod = Convert.ToInt32(ds.Tables[0].Rows[0]["FPAYMENTMETHOD"]);
+                            if (paymentMethod == 2)
+                            {
+                                var firstEntry = entryObjs.Cast<DynamicObject>().First();
+                                newPlan["FPURCHASEORDERNO"] = firstEntry["FORDERNUMBER"];
+                            }
+                        }
+                    }
+
                     payPlan.Add(newPlan);
                 }
             }
