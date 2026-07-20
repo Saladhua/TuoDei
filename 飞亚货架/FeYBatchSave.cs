@@ -8,6 +8,9 @@
  *
  *   请求体示例（生产入库单 — PRD_INSTOCK）：
  *   {
+ *     "DBID": "6979e702b71b4c",
+ *     "UserName": "kd01",
+ *     "Password": "123qwe..",
  *     "FormId": "PRD_INSTOCK",
  *     "DataList": [
  *       {
@@ -28,7 +31,9 @@
  *   }
  *
  *   说明：
- *   - DataCenterId（账套ID）已在接口内部写死，外部调用无需传入
+ *   - DBID（账套Id/DataCenterId）由外部请求体传入，接口先用 DBID+UserName+Password
+ *     调用 AuthService.ValidateUser 登录鉴权，账套上下文通过登录 Cookie 透传至后续 BatchSave 调用
+ *   - UserName / Password 为用户登录账号密码，鉴权失败时返回错误
  *
  * ──────────────────────────────────────────
  * 二、支持的单据类型（通过 FormId 区分）
@@ -133,6 +138,11 @@ namespace kingdee.CustLI.Business.PlugInWebApi
     {
         private const string CloudUrl = "http://localhost/k3cloud/";
 
+        private string _dbId;
+        private string _userName;
+        private string _password;
+        private CookieContainer _cookieContainer;
+
         public FeYBatchSave(KDServiceContext context)
             : base(context)
         {
@@ -142,6 +152,24 @@ namespace kingdee.CustLI.Business.PlugInWebApi
         {
             try
             {
+                _dbId = request["DBID"] != null ? request["DBID"].ToString() : "";
+                _userName = request["UserName"] != null ? request["UserName"].ToString() : "";
+                _password = request["Password"] != null ? request["Password"].ToString() : "";
+
+                if (string.IsNullOrEmpty(_dbId))
+                {
+                    return BuildResult(false, "DBID(账套Id) 不能为空", 0, 0, new JArray());
+                }
+                if (string.IsNullOrEmpty(_userName) || string.IsNullOrEmpty(_password))
+                {
+                    return BuildResult(false, "UserName/Password 不能为空", 0, 0, new JArray());
+                }
+
+                if (!Login(_dbId, _userName, _password))
+                {
+                    return BuildResult(false, "账套登录鉴权失败，请检查 DBID/UserName/Password", 0, 0, new JArray());
+                }
+
                 string formId = request["FormId"] != null ? request["FormId"].ToString() : "";
                 JArray dataList = request["DataList"] as JArray;
 
@@ -170,39 +198,30 @@ namespace kingdee.CustLI.Business.PlugInWebApi
             }
         }
 
-        //private bool Login(string ztid, string userName, string password)
-        //{
-        //    if (!string.IsNullOrEmpty(HttpRuntime.Cache.Get("LoginCookie") as string))
-        //    {
-        //        return true;
-        //    }
+        private bool Login(string dbId, string userName, string password)
+        {
+            _cookieContainer = new CookieContainer();
 
-        //    string url = string.Concat(CloudUrl, "Kingdee.BOS.WebApi.ServicesStub.AuthService.ValidateUser.common.kdsvc");
-        //    List<object> Parameters = new List<object>();
-        //    Parameters.Add(ztid);
-        //    Parameters.Add(userName);
-        //    Parameters.Add(password);
-        //    Parameters.Add(2052);
-        //    string content = JsonConvert.SerializeObject(Parameters);
+            string url = string.Concat(CloudUrl, "Kingdee.BOS.WebApi.ServicesStub.AuthService.ValidateUser.common.kdsvc");
+            List<object> parameters = new List<object>();
+            parameters.Add(dbId);
+            parameters.Add(userName);
+            parameters.Add(password);
+            parameters.Add(2052);
+            string content = JsonConvert.SerializeObject(parameters);
 
-        //    try
-        //    {
-        //        string result = HttpPost(url, content);
-        //        var iResult = JObject.Parse(result)["LoginResultType"].Value<int>();
+            try
+            {
+                string result = HttpPost(url, content);
+                var iResult = JObject.Parse(result)["LoginResultType"].Value<int>();
 
-        //        if (iResult == 1 || iResult == -5)
-        //        {
-        //            HttpRuntime.Cache.Insert("LoginCookie", "1", null, DateTime.Now.AddMinutes(10), Cache.NoSlidingExpiration);
-        //            return true;
-        //        }
-
-        //        return false;
-        //    }
-        //    catch (Exception e)
-        //    {
-        //        throw new Exception(e.ToString());
-        //    }
-        //}
+                return iResult == 1;
+            }
+            catch (Exception e)
+            {
+                throw new Exception("登录鉴权异常: " + e.Message);
+            }
+        }
 
         private (long fid, long fentryId) GetMoIds(string moBillNo)
         {
@@ -254,6 +273,10 @@ namespace kingdee.CustLI.Business.PlugInWebApi
             httpRequest.Method = "POST";
             httpRequest.ContentType = "application/json";
             httpRequest.Timeout = 1000 * 60 * 10;
+            if (_cookieContainer != null)
+            {
+                httpRequest.CookieContainer = _cookieContainer;
+            }
 
             JObject jObj = new JObject();
             jObj.Add("format", 1);
