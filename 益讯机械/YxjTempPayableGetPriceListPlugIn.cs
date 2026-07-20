@@ -307,6 +307,14 @@ namespace kingdee.CustLI.Business.PlugIn
                 sb.Append("FNOTAXAMOUNT = CASE FID ");
                 foreach (var kv in headerTotals)
                     sb.AppendFormat("WHEN {0} THEN {1} ", kv.Key, kv.Value.noTaxAmt.ToString("F2", System.Globalization.CultureInfo.InvariantCulture));
+                sb.Append("END, ");
+                sb.Append("FTAXAMOUNTFOR = CASE FID ");
+                foreach (var kv in headerTotals)
+                    sb.AppendFormat("WHEN {0} THEN {1} ", kv.Key, kv.Value.taxAmt.ToString("F2", System.Globalization.CultureInfo.InvariantCulture));
+                sb.Append("END, ");
+                sb.Append("FNOTAXAMOUNTFOR = CASE FID ");
+                foreach (var kv in headerTotals)
+                    sb.AppendFormat("WHEN {0} THEN {1} ", kv.Key, kv.Value.noTaxAmt.ToString("F2", System.Globalization.CultureInfo.InvariantCulture));
                 sb.Append("END ");
                 sb.AppendFormat("WHERE FID IN ({0});", billIdList);
 
