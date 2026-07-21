@@ -72,11 +72,17 @@ namespace kingdee.CustLI.Business.PlugIn
                         totalAmountFor += Convert.ToDecimal(entry["FALLAMOUNTFOR_D"] ?? 0m);
                     }
 
+                    var firstEntry = entryObjs.Cast<DynamicObject>().First();
+
                     DynamicObject newPlan = new DynamicObject(payPlan.DynamicCollectionItemPropertyType);
                     newPlan["ENDDATE"] = bill["FENDDATE_H"];
                     newPlan["PAYAMOUNTFOR"] = Math.Round(totalAmountFor, 6);
                     newPlan["FPAYRATE"] = 100m;
                     newPlan["PAYAMOUNT"] = Math.Round(totalAmountFor, 6);
+                    newPlan["FWRITTENOFFSTATUS"] = "A";
+                    newPlan["FNOTVERIFICATEAMOUNT"] = Math.Round(totalAmountFor, 6);
+                    newPlan["FENTRYID"] = firstEntry["FENTRYID"];
+                    newPlan["FSEQ"] = 1;
 
                     var payConditionObj = bill["PayConditon"] as DynamicObject;
                     if (payConditionObj != null)
@@ -89,7 +95,6 @@ namespace kingdee.CustLI.Business.PlugIn
                             int paymentMethod = Convert.ToInt32(ds.Tables[0].Rows[0]["FPAYMENTMETHOD"]);
                             if (paymentMethod == 2)
                             {
-                                var firstEntry = entryObjs.Cast<DynamicObject>().First();
                                 newPlan["FPURCHASEORDERNO"] = firstEntry["FORDERNUMBER"];
                             }
                         }
