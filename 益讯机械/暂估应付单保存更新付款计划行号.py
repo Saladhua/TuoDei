@@ -4,8 +4,6 @@ clr.AddReference('System.Data')
 clr.AddReference('Kingdee.BOS')
 clr.AddReference('Kingdee.BOS.DataEntity')
 clr.AddReference('Kingdee.BOS.Core')
-clr.AddReference('Kingdee.BOS.App')
-clr.AddReference('Kingdee.BOS.App.Core')
 clr.AddReference('Kingdee.BOS.ServiceHelper')
 
 from Kingdee.BOS import *
@@ -13,8 +11,7 @@ from Kingdee.BOS.Core import *
 from Kingdee.BOS.Orm.DataEntity import *
 from System import *
 from System.Data import *
-from Kingdee.BOS.App.Data import DBUtils
-from Kingdee.BOS.ServiceHelper import *
+from Kingdee.BOS.ServiceHelper import DBServiceHelper
 
 
 def OnPreparePropertys(e):
@@ -43,7 +40,7 @@ def AfterExecuteOperationTransaction(e):
 		sql = ("/*dialect*/ UPDATE T_AP_PAYABLEPLAN "
 			"SET FENTRYID={0},FSEQ='1' "
 			"WHERE FID={1} AND (FENTRYID IS NULL OR FENTRYID=0)").format(firstEntryId, billId)
-		DBUtils.Execute(this.Context, sql, None, False)
+		DBServiceHelper.ExecuteDataSet(this.Context, sql)
 
 		result = OperateResult()
 		result.SuccessStatus = True
