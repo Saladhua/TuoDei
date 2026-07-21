@@ -34,13 +34,15 @@ namespace kingdee.CustLI.Business.PlugIn
         {
             base.BeforeExecuteOperationTransaction(e);
 
-            foreach (DynamicObject bill in e.DataEntitys)
+            foreach (ExtendedDataEntity data in e.SelectedRows)
             {
+                DynamicObject bill = data.DataEntity;
+
                 string acctType = bill["FSETACCOUNTTYPE"]?.ToString() ?? "";
                 if (acctType != AcctTypeTemp)
                     continue;
 
-                var payPlan = bill["AP_PAYABLEPLAN"] as DynamicObjectCollection;
+                DynamicObjectCollection payPlan = (DynamicObjectCollection)bill["AP_PAYABLEPLAN"];
                 if (payPlan == null || payPlan.Count > 0)
                     continue;
 
