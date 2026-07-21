@@ -1,19 +1,23 @@
+using Kingdee.BOS;
+using Kingdee.BOS.App.Data;
+using Kingdee.BOS.Core.Bill;
+using Kingdee.BOS.Core.DynamicForm;
+using Kingdee.BOS.Core.DynamicForm.Operation;
+using Kingdee.BOS.Core.DynamicForm.PlugIn;
+using Kingdee.BOS.Core.DynamicForm.PlugIn.Args;
+using Kingdee.BOS.Core.List;
+using Kingdee.BOS.Core.List.PlugIn;
+using Kingdee.BOS.Core.Metadata;
+using Kingdee.BOS.Orm.DataEntity;
+using Kingdee.BOS.ServiceHelper;
+using Kingdee.BOS.Util;
+using Kingdee.BOS.Web.Bill;
+using Kingdee.K3.FIN.Core.ForCNConst;
+using Newtonsoft.Json;
 using System;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Linq;
-using System.Text;
-using Kingdee.BOS;
-using Kingdee.BOS.Core.DynamicForm;
-using Kingdee.BOS.Core.DynamicForm.PlugIn;
-using Kingdee.BOS.Core.DynamicForm.PlugIn.Args;
-using Kingdee.BOS.Core.List.PlugIn;
-using Kingdee.BOS.Orm.DataEntity;
-using Kingdee.BOS.ServiceHelper;
-using Kingdee.BOS.Core.DynamicForm.Operation;
-using Kingdee.BOS.Core.Metadata;
-using Kingdee.BOS.Core.Validation;
-using Kingdee.BOS.Util;
 
 namespace kingdee.CustLI.Business.PlugIn
 {
@@ -41,342 +45,102 @@ namespace kingdee.CustLI.Business.PlugIn
             base.BarItemClick(e);
 
 
-
             if (e.BarItemKey != BarItemGetPrice)
                 return;
 
-            object[] pkValues = this.ListView.SelectedRowsInfo.GetPrimaryKeyValues();
-            if (pkValues == null || pkValues.Length == 0)
+            //按单据Id存储分录Id信息
+            Dictionary<string, List<string>> bills = new Dictionary<string, List<string>>();
+            foreach (ListSelectedRow item in this.ListView.SelectedRowsInfo)
             {
-                this.View.ShowMessage("请先勾选需要获取价格的暂估应付单。");
-                return;
-            }
+                var billId = item.FieldValues["FBillHead"].ToString();
+                var billEntryId = item.EntryPrimaryKeyValue;
 
-            var ids = pkValues.Select(pk => Convert.ToInt64(pk)).ToList();
-
-            BusinessInfo info = this.View.BillBusinessInfo;
-            string idFilter = string.Format("FID IN ({0})", string.Join(",", ids));
-            OQLFilter oqlFilter = OQLFilter.CreateHeadEntityFilter(idFilter);
-            DynamicObject[] bills = BusinessDataServiceHelper.Load(this.Context, info, null, oqlFilter);
-            if (bills == null || bills.Length == 0)
-            {
-                this.View.ShowMessage("加载单据失败，请确认单据状态。");
-                return;
-            }
-
-            var refs = new List<EntryRef>();
-            var sourceBillNos = new List<string>();
-            var changedBills = new HashSet<DynamicObject>();
-
-            foreach (DynamicObject bill in bills)
-            {
-                string acctType = (bill["FSETACCOUNTTYPE"] == null) ? string.Empty : bill["FSETACCOUNTTYPE"].ToString();
-                if (acctType != AcctTypeTemp)
-                    continue;
-
-                string docStatus = (bill["DOCUMENTSTATUS"] == null) ? string.Empty : bill["DOCUMENTSTATUS"].ToString();
-                if (!AllowDocStatus.Contains(docStatus))
-                    continue;
-
-                long supplierId = (bill["SupplierId_ID"] == null) ? 0L : Convert.ToInt64(bill["SupplierId_ID"]);
-                bool includedTax = (bill["ISTAX"] != null) && Convert.ToBoolean(bill["ISTAX"]);
-
-                var entryObjs = bill["AP_PAYABLEENTRY"] as DynamicObjectCollection;
-                if (entryObjs == null)
-                    continue;
-
-                foreach (DynamicObject entry in entryObjs)
+                if (bills.Keys.Contains(billId))
                 {
-                    if (entry["IsFree"] != null && Convert.ToBoolean(entry["IsFree"]))
-                        continue;
+                    bills[billId].Add(billEntryId);
+                }
+                else
+                {
+                    bills.Add(billId, new List<string> { billEntryId });
+                }
+            }
 
-                    long materialId = (entry["MaterialId_Id"] == null) ? 0L : Convert.ToInt64(entry["MaterialId_Id"]);
-                    if (materialId == 0L)
-                        continue;
+            foreach (var item in bills)
+            {
+                //根据该Id 创建表单视图
+                var view = CreateBillView(this.Context, "AP_Payable", null, item.Key);
 
-                    string sourceType = (entry["FSOURCETYPE"] == null) ? string.Empty : entry["FSOURCETYPE"].ToString();
-                    string sourceBillNo = (entry["SourceBillNo"] == null) ? string.Empty : entry["SourceBillNo"].ToString();
-
-                    if (!string.IsNullOrEmpty(sourceBillNo) && !sourceBillNos.Contains(sourceBillNo))
-                        sourceBillNos.Add(sourceBillNo);
-
-                    refs.Add(new EntryRef
+                //读取明细行数据
+                var entryCount = view.Model.GetEntryRowCount("FEntityDetail");
+                for (int i = 0; i < entryCount; i++)
+                {
+                    var entryId = view.Model.GetEntryPKValue("FEntityDetail", i).ToString();
+                    //查找选中行 ben
+                    if (!item.Value.Any(x => x.Contains(entryId)))
                     {
-                        Bill = bill,
-                        Entry = entry,
-                        SupplierId = supplierId,
-                        MaterialId = materialId,
-                        IncludedTax = includedTax,
-                        SourceType = sourceType,
-                        SourceBillNo = sourceBillNo
-                    });
+                        continue;
+                    }
+                    //含税单价查询  select 查询
+                    var matObj = view.Model.GetValue("FMATERIALID", i) as DynamicObject;
+                    if (matObj == null)
+                    {
+                        continue;
+                    }
+
+
+                    //var priceList = DBUtils.ExecuteDynamicObject(this.Context,$@"select FTaxPrice from [dbo].[AP_Payable] where FMATERIALID");
+
+
+
+                    //调用表单操作 SetValue设置含税单价， 后触发值更新形成付款计划
+                    view.Model.SetValue("FTAXPRICE", 1850, i);
+                    view.InvokeFieldUpdateService("FTAXPRICE", i);
                 }
+                //这里调用保存
+                view.Model.Save();
             }
-
-            if (refs.Count == 0)
-            {
-                this.View.ShowMessage("所选单据中没有符合取价条件的行。");
-                return;
-            }
-
-            Dictionary<string, string> bizMap = PriceListQueryHelper.GetBusinessTypeMap(this.Context, sourceBillNos);
-            foreach (var r in refs)
-                r.PriceType = PriceListQueryHelper.DerivePriceType(r.SourceType, r.SourceBillNo, bizMap);
-
-            var reqs = refs.Select(r => new PriceListQueryHelper.PriceReq
-            {
-                SupplierId = r.SupplierId,
-                MaterialId = r.MaterialId,
-                PriceType = r.PriceType,
-                IncludedTax = r.IncludedTax
-            }).ToList();
-
-            Dictionary<string, decimal?> priceMap =
-                PriceListQueryHelper.GetLatestTaxPrice(this.Context, reqs);
-
-            int filledCount = 0;
-            var entryUpdates = new Dictionary<long, (string taxPrice, string price, string allAmt, string noTaxAmt, string taxAmt)>();
-            var headerTotals = new Dictionary<long, (decimal allAmt, decimal taxAmt, decimal noTaxAmt)>();
-            var billIdMap = new Dictionary<DynamicObject, long>();
-
-            foreach (var r in refs)
-            {
-                string key = PriceListQueryHelper.BuildKey(
-                    r.SupplierId, r.MaterialId, r.PriceType, r.IncludedTax ? 1 : 0);
-
-                if (!priceMap.TryGetValue(key, out decimal? priceValue) || !priceValue.HasValue)
-                    continue;
-
-                decimal qty = Convert.ToDecimal(r.Entry["PriceQty"] ?? 0m);
-                if (qty == 0m)
-                    continue;
-
-                decimal taxRate = Convert.ToDecimal(r.Entry["EntryTaxRate"] ?? 0m);
-
-                decimal rawPrice = priceValue.Value;
-
-                if (r.IncludedTax)
-                {
-                    decimal taxPrice = Math.Round(rawPrice, 6);
-                    decimal unitPrice = taxRate > 0m
-                        ? Math.Round(taxPrice / (1m + taxRate / 100m), 6)
-                        : taxPrice;
-
-                    r.Entry["TaxPrice"] = taxPrice;
-                    r.Entry["FPrice"] = unitPrice;
-                }
-                else
-                {
-                    decimal unitPrice = Math.Round(rawPrice, 6);
-                    decimal taxPrice = taxRate > 0m
-                        ? Math.Round(unitPrice * (1m + taxRate / 100m), 6)
-                        : unitPrice;
-
-                    r.Entry["FPrice"] = unitPrice;
-                    r.Entry["TaxPrice"] = taxPrice;
-                }
-
-                r.Entry["EntryTaxRate"] = taxRate;
-
-                decimal entryTaxPrice = Convert.ToDecimal(r.Entry["TaxPrice"]);
-                decimal entryPrice = Convert.ToDecimal(r.Entry["FPrice"]);
-                decimal noTaxAmt = Math.Round(qty * entryPrice, 2);
-                decimal allAmt = Math.Round(qty * entryTaxPrice, 2);
-                decimal taxAmt = allAmt - noTaxAmt;
-
-                r.Entry["FALLAMOUNTFOR_D"] = allAmt;
-                r.Entry["FNoTaxAmountFor_D"] = noTaxAmt;
-                r.Entry["NOTAXAMOUNT"] = noTaxAmt;
-                r.Entry["FTAXAMOUNTFOR_D"] = taxAmt;
-
-                long entryId = Convert.ToInt64(r.Entry["Id"]);
-                long billId = Convert.ToInt64(r.Bill["Id"]);
-
-                entryUpdates[entryId] = (
-                    entryTaxPrice.ToString("F6", System.Globalization.CultureInfo.InvariantCulture),
-                    entryPrice.ToString("F6", System.Globalization.CultureInfo.InvariantCulture),
-                    allAmt.ToString("F2", System.Globalization.CultureInfo.InvariantCulture),
-                    noTaxAmt.ToString("F2", System.Globalization.CultureInfo.InvariantCulture),
-                    taxAmt.ToString("F2", System.Globalization.CultureInfo.InvariantCulture));
-
-                if (headerTotals.ContainsKey(billId))
-                {
-                    var old = headerTotals[billId];
-                    headerTotals[billId] = (old.allAmt + allAmt, old.taxAmt + taxAmt, old.noTaxAmt + noTaxAmt);
-                }
-                else
-                    headerTotals[billId] = (allAmt, taxAmt, noTaxAmt);
-
-                billIdMap[r.Bill] = billId;
-                changedBills.Add(r.Bill);
-                filledCount++;
-            }
-
-            foreach (DynamicObject bill in changedBills)
-            {
-                var entryObjs = bill["AP_PAYABLEENTRY"] as DynamicObjectCollection;
-                if (entryObjs == null) continue;
-
-                decimal totalAmountFor = 0m;
-
-                foreach (DynamicObject entry in entryObjs)
-                {
-                    totalAmountFor += Convert.ToDecimal(entry["FALLAMOUNTFOR_D"] ?? 0m);
-                }
-
-                var payPlan = bill["AP_PAYABLEPLAN"] as DynamicObjectCollection;
-                if (payPlan != null)
-                {
-                    payPlan.Clear();
-                    DynamicObject newPlan = new DynamicObject(payPlan.DynamicCollectionItemPropertyType);
-                    newPlan["ENDDATE"] = bill["FENDDATE_H"];
-                    newPlan["PAYAMOUNTFOR"] = Math.Round(totalAmountFor, 6);
-                    newPlan["FPAYRATE"] = 100m;
-                    newPlan["PAYAMOUNT"] = Math.Round(totalAmountFor, 6);
-                    payPlan.Add(newPlan);
-                }
-            }
-
-            if (changedBills.Count == 0)
-            {
-                this.View.ShowMessage("未在采购价目表中匹配到对应价格，未更新任何单据。");
-                return;
-            }
-
-            DynamicObject[] dataObjects = changedBills.ToArray();
-
-            // Step 1 - Save前写死金额
-            if (entryUpdates.Count > 0)
-            {
-                var sb = new StringBuilder();
-
-                string entryIdList = string.Join(",", entryUpdates.Keys);
-                string billIdList = string.Join(",", headerTotals.Keys);
-
-                sb.Append("UPDATE T_AP_PAYABLEENTRY SET ");
-                sb.Append("FTAXPRICE = CASE FENTRYID ");
-                foreach (var kv in entryUpdates)
-                    sb.AppendFormat("WHEN {0} THEN {1} ", kv.Key, kv.Value.taxPrice);
-                sb.Append("END, ");
-                sb.Append("FPrice = CASE FENTRYID ");
-                foreach (var kv in entryUpdates)
-                    sb.AppendFormat("WHEN {0} THEN {1} ", kv.Key, kv.Value.price);
-                sb.Append("END, ");
-                sb.Append("FALLAMOUNTFOR = CASE FENTRYID ");
-                foreach (var kv in entryUpdates)
-                    sb.AppendFormat("WHEN {0} THEN {1} ", kv.Key, kv.Value.allAmt);
-                sb.Append("END, ");
-                sb.Append("FNoTaxAmountFor = CASE FENTRYID ");
-                foreach (var kv in entryUpdates)
-                    sb.AppendFormat("WHEN {0} THEN {1} ", kv.Key, kv.Value.noTaxAmt);
-                sb.Append("END, ");
-                sb.Append("FTAXAMOUNTFOR = CASE FENTRYID ");
-                foreach (var kv in entryUpdates)
-                    sb.AppendFormat("WHEN {0} THEN {1} ", kv.Key, kv.Value.taxAmt);
-                sb.Append("END, ");
-                sb.Append("FALLAMOUNT = CASE FENTRYID ");
-                foreach (var kv in entryUpdates)
-                    sb.AppendFormat("WHEN {0} THEN {1} ", kv.Key, kv.Value.allAmt);
-                sb.Append("END, ");
-                sb.Append("FTAXAMOUNT = CASE FENTRYID ");
-                foreach (var kv in entryUpdates)
-                    sb.AppendFormat("WHEN {0} THEN {1} ", kv.Key, kv.Value.taxAmt);
-                sb.Append("END, ");
-                sb.Append("FNOTAXAMOUNT = CASE FENTRYID ");
-                foreach (var kv in entryUpdates)
-                    sb.AppendFormat("WHEN {0} THEN {1} ", kv.Key, kv.Value.noTaxAmt);
-                sb.Append("END ");
-                sb.AppendFormat("WHERE FENTRYID IN ({0}) AND FID IN ({1});", entryIdList, billIdList);
-
-                sb.Append("UPDATE T_AP_PAYABLE SET ");
-                sb.Append("FALLAMOUNTFOR = CASE FID ");
-                foreach (var kv in headerTotals)
-                    sb.AppendFormat("WHEN {0} THEN {1} ", kv.Key, kv.Value.allAmt.ToString("F2", System.Globalization.CultureInfo.InvariantCulture));
-                sb.Append("END ");
-                sb.AppendFormat("WHERE FID IN ({0});", billIdList);
-
-                sb.Append("UPDATE T_AP_PAYABLEFIN SET ");
-                sb.Append("FALLAMOUNT = CASE FID ");
-                foreach (var kv in headerTotals)
-                    sb.AppendFormat("WHEN {0} THEN {1} ", kv.Key, kv.Value.allAmt.ToString("F2", System.Globalization.CultureInfo.InvariantCulture));
-                sb.Append("END, ");
-                sb.Append("FTAXAMOUNT = CASE FID ");
-                foreach (var kv in headerTotals)
-                    sb.AppendFormat("WHEN {0} THEN {1} ", kv.Key, kv.Value.taxAmt.ToString("F2", System.Globalization.CultureInfo.InvariantCulture));
-                sb.Append("END, ");
-                sb.Append("FNOTAXAMOUNT = CASE FID ");
-                foreach (var kv in headerTotals)
-                    sb.AppendFormat("WHEN {0} THEN {1} ", kv.Key, kv.Value.noTaxAmt.ToString("F2", System.Globalization.CultureInfo.InvariantCulture));
-                sb.Append("END, ");
-                sb.Append("FTAXAMOUNTFOR = CASE FID ");
-                foreach (var kv in headerTotals)
-                    sb.AppendFormat("WHEN {0} THEN {1} ", kv.Key, kv.Value.taxAmt.ToString("F2", System.Globalization.CultureInfo.InvariantCulture));
-                sb.Append("END, ");
-                sb.Append("FNOTAXAMOUNTFOR = CASE FID ");
-                foreach (var kv in headerTotals)
-                    sb.AppendFormat("WHEN {0} THEN {1} ", kv.Key, kv.Value.noTaxAmt.ToString("F2", System.Globalization.CultureInfo.InvariantCulture));
-                sb.Append("END ");
-                sb.AppendFormat("WHERE FID IN ({0});", billIdList);
-
-                DBServiceHelper.ExecuteDataSet(this.Context, sb.ToString());
-            }
-
-            //IOperationResult saveResult = BusinessDataServiceHelper.Save(this.Context, info, dataObjects);
-
-            //// Step 2 - Save后更新付款计划
-            //if (saveResult.IsSuccess)
-            //{
-            //    if (headerTotals.Count > 0)
-            //    {
-            //        var sbPlan = new StringBuilder();
-            //        string billIdList = string.Join(",", headerTotals.Keys);
-
-            //        sbPlan.Append("UPDATE T_AP_PAYABLEPLAN SET ");
-            //        sbPlan.Append("FPAYAMOUNTFOR = CASE FID ");
-            //        foreach (var kv in headerTotals)
-            //            sbPlan.AppendFormat("WHEN {0} THEN {1} ", kv.Key, kv.Value.allAmt.ToString("F2", System.Globalization.CultureInfo.InvariantCulture));
-            //        sbPlan.Append("END, ");
-            //        sbPlan.Append("FPAYAMOUNT = CASE FID ");
-            //        foreach (var kv in headerTotals)
-            //            sbPlan.AppendFormat("WHEN {0} THEN {1} ", kv.Key, kv.Value.allAmt.ToString("F2", System.Globalization.CultureInfo.InvariantCulture));
-            //        sbPlan.Append("END ");
-            //        sbPlan.AppendFormat("WHERE FID IN ({0});", billIdList);
-
-            //        DBServiceHelper.ExecuteDataSet(this.Context, sbPlan.ToString());
-            //    }
-
-            //    this.View.Refresh();
-            //    this.View.ShowMessage(string.Format("已成功为 {0} 行获取价目表价格并保存。", filledCount));
-            //}
-            //else
-            //{
-            //    FormatOperateResultValidationInfo(saveResult);
-            //    this.View.ShowOperateResult(saveResult.OperateResult);
-            //}
-
-            this.View.Refresh();
-            this.View.ShowMessage(string.Format("已成功为 {0} 行获取价目表价格并保存。", filledCount));
         }
 
-        protected virtual void FormatOperateResultValidationInfo(IOperationResult result)
-        {
-            if (result.ValidationErrors == null || result.ValidationErrors.Count == 0)
-                return;
+        /// <summary>
+        /// 创建单据视图
+        /// </summary>
+        /// <param name="ctx">上下文</param>
+        /// <param name="formId">单据类型ID</param>
+        /// <param name="layoutId">布局ID</param>
+        /// <param name="pkId">主键ID</param>
+        /// <returns></returns>
 
-            var collection = result.OperateResult;
-            foreach (var errorInfo in result.ValidationErrors)
+        private static BillView CreateBillView(Context ctx, string formId, string layoutId = null, object pkId = null)
+        {
+            var meta = (FormMetadata)Kingdee.BOS.ServiceHelper.MetaDataServiceHelper.Load(ctx, formId); //单据唯一标识
+            var form = meta.BusinessInfo.GetForm();
+
+            var param = new BillOpenParameter(formId, layoutId);
+            param.Context = ctx;
+            param.FormMetaData = meta;
+            if (pkId != null && !string.IsNullOrWhiteSpace(pkId.ToString()))
             {
-                var rs = new OperateResult
-                {
-                    PKValue = errorInfo.BillPKID,
-                    RowIndex = errorInfo.RowIndex,
-                    Name = errorInfo.Title,
-                    SuccessStatus = false,
-                    Message = errorInfo.Message,
-                    MessageType = errorInfo.Level == ErrorLevel.Warning ? MessageType.Warning : MessageType.FatalError
-                };
-                collection.Add(rs);
+                param.Status = OperationStatus.EDIT;
+                param.InitStatus = OperationStatus.EDIT;
+                param.PkValue = pkId; //单据主键内码FID
             }
+            else
+            {
+                param.Status = OperationStatus.ADDNEW;
+                param.InitStatus = OperationStatus.ADDNEW;
+            }
+
+            param.SetCustomParameter("formID", form.Id);
+            param.SetCustomParameter("PlugIns", form.CreateFormPlugIns()); //插件实例模型
+            param.SetCustomParameter("ShowConfirmDialogWhenChangeOrg", false);
+            param.NetCtrlDisable = true; // 禁用网控
+            var provider = form.GetFormServiceProvider();
+            var billview = (BillView)provider.GetService(typeof(IDynamicFormView));
+            //var type = Type.GetType("Kingdee.BOS.Web.Import.ImportBillView,Kingdee.BOS.Web");
+            //var billview2 = (BillView)Activator.CreateInstance(type);
+            billview.Initialize(param, provider); //初始化                
+            billview.LoadData(); //加载单据数据                
+            return billview;
         }
     }
 }
