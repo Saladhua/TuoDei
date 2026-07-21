@@ -183,6 +183,7 @@
     <Compile Include="益讯机械\YxjAPPayableSaveGetPricePlugIn.cs" />
     <Compile Include="益讯机械\YxjAPPayableSubmitValidatePlugIn.cs" />
     <Compile Include="益讯机械\YxjTempPayableSaveServicePlugIn.cs" />
+    <Compile Include="益讯机械\YxjTempPayableSaveFormPlugIn.cs" />
     <Compile Include="飞亚货架\FeYBatchSave.cs" />
     <Compile Include="飞亚货架\FeYHttpHelper.cs" />
     <Compile Include="飞亚货架\FeYMaterialPushBillPlugIn.cs" />

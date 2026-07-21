@@ -2,7 +2,7 @@ using System;
 using System.ComponentModel;
 using System.Data;
 using System.Linq;
-using Kingdee.BOS.Core.DynamicForm.PlugIn;
+using Kingdee.BOS.Core.Bill.PlugIn;
 using Kingdee.BOS.Core.DynamicForm.PlugIn.Args;
 using Kingdee.BOS.Orm.DataEntity;
 using Kingdee.BOS.ServiceHelper;
@@ -13,10 +13,24 @@ namespace kingdee.CustLI.Business.PlugIn
     [Description("益讯机械-暂估应付单保存前自动生成付款计划"), HotUpdate]
     public class YxjTempPayableSaveFormPlugIn : AbstractBillPlugIn
     {
-        public override void BeforeSave(BeforeSaveEventArgs e)
+        public override void DataChanged(DataChangedEventArgs e)
         {
-            base.BeforeSave(e);
+            base.DataChanged(e);
 
+            if (e.Field?.Key != "FSETACCOUNTTYPE")
+                return;
+
+            GeneratePaymentPlan();
+        }
+
+        public override void AfterBindData(EventArgs e)
+        {
+            base.AfterBindData(e);
+            GeneratePaymentPlan();
+        }
+
+        private void GeneratePaymentPlan()
+        {
             var bill = this.View.Model.DataObject;
             string acctType = bill["FSETACCOUNTTYPE"]?.ToString() ?? "";
             if (acctType != "2")
