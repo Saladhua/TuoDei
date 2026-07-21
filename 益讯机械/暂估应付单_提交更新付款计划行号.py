@@ -40,5 +40,6 @@ def BeforeDoOperation(e):
     billId = Convert.ToInt64(bill["Id"])
     firstEntryId = Convert.ToInt64(entries[0]["Id"])
 
-    sql = "UPDATE T_AP_PAYABLEPLAN SET FENTRYID={0},FSEQ='1' WHERE FID={1} AND (FENTRYID IS NULL OR FENTRYID=0)".format(firstEntryId, billId)
-    DBUtils.Execute(this.View.Context, sql)
+    sql = "/*dialect*/ UPDATE T_AP_PAYABLEPLAN SET FENTRYID={0},FSEQ='1' WHERE FID={1} AND (FENTRYID IS NULL OR FENTRYID=0)".format(firstEntryId, billId)
+    count = DBUtils.Execute(this.Context, sql)
+    this.View.ShowMessage("付款计划行号更新成功，SQL: " + sql + "\n受影响行数: " + str(count))
