@@ -6,7 +6,6 @@ using Kingdee.BOS;
 using Kingdee.BOS.Core;
 using Kingdee.BOS.Core.DynamicForm.PlugIn;
 using Kingdee.BOS.Core.DynamicForm.PlugIn.Args;
-using Kingdee.BOS.Core.Validation;
 using Kingdee.BOS.Orm.DataEntity;
 using Kingdee.BOS.ServiceHelper;
 using Kingdee.BOS.Util;
@@ -31,77 +30,55 @@ namespace kingdee.CustLI.Business.PlugIn
             e.FieldKeys.Add("FPURCHASEORDERNO");
         }
 
-        public override void OnAddValidators(AddValidatorsEventArgs e)
+        public override void BeforeExecuteOperationTransaction(BeforeExecuteOperationTransaction e)
         {
-            base.OnAddValidators(e);
-            e.Validators.Insert(0, new PaymentPlanValidator());
-        }
+            base.BeforeExecuteOperationTransaction(e);
 
-        private class PaymentPlanValidator : AbstractValidator
-        {
-            public PaymentPlanValidator()
+            foreach (var bill in e.DataEntitys)
             {
-                this.EntityKey = "FBillHead";
-                this.AlwaysValidate = true;
-            }
+                string acctType = (bill["FSETACCOUNTTYPE"] == null) ? string.Empty : bill["FSETACCOUNTTYPE"].ToString();
+                if (acctType != AcctTypeTemp)
+                    continue;
 
-            public override void Validate(
-                ExtendedDataEntity[] dataEntities,
-                ValidateContext validateContext,
-                Context ctx)
-            {
-                foreach (var entity in dataEntities)
+                var payPlan = bill["AP_PAYABLEPLAN"] as DynamicObjectCollection;
+                if (payPlan == null || payPlan.Count > 0)
+                    continue;
+
+                var entryObjs = bill["AP_PAYABLEENTRY"] as DynamicObjectCollection;
+                if (entryObjs == null || entryObjs.Count == 0)
+                    continue;
+
+                decimal totalAmountFor = 0m;
+                foreach (DynamicObject entry in entryObjs)
                 {
-                    DynamicObject bill = entity.DataEntity;
+                    totalAmountFor += Convert.ToDecimal(entry["FALLAMOUNTFOR_D"] ?? 0m);
+                }
 
-                    string acctType = (bill["FSETACCOUNTTYPE"] == null) ? string.Empty : bill["FSETACCOUNTTYPE"].ToString();
-                    if (acctType != YxjTempPayableSaveServicePlugIn.AcctTypeTemp)
-                        continue;
+                var firstEntry = entryObjs.Cast<DynamicObject>().First();
 
-                    var payPlan = bill["AP_PAYABLEPLAN"] as DynamicObjectCollection;
-                    if (payPlan == null || payPlan.Count > 0)
-                        continue;
+                DynamicObject newPlan = new DynamicObject(payPlan.DynamicCollectionItemPropertyType);
+                newPlan["ENDDATE"] = bill["FENDDATE_H"];
+                newPlan["PAYAMOUNTFOR"] = Math.Round(totalAmountFor, 6);
+                newPlan["FPAYRATE"] = 100m;
+                newPlan["PAYAMOUNT"] = Math.Round(totalAmountFor, 6);
 
-                    var entryObjs = bill["AP_PAYABLEENTRY"] as DynamicObjectCollection;
-                    if (entryObjs == null || entryObjs.Count == 0)
-                        continue;
-
-                    decimal totalAmountFor = 0m;
-                    foreach (DynamicObject entry in entryObjs)
+                var payConditionObj = bill["PayConditon"] as DynamicObject;
+                if (payConditionObj != null)
+                {
+                    long payConditionId = Convert.ToInt64(payConditionObj["Id"]);
+                    string sql = $"SELECT FPAYMENTMETHOD FROM T_BD_PaymentCondition WHERE FID = {payConditionId}";
+                    DataSet ds = DBServiceHelper.ExecuteDataSet(this.Context, sql);
+                    if (ds != null && ds.Tables.Count > 0 && ds.Tables[0].Rows.Count > 0)
                     {
-                        totalAmountFor += Convert.ToDecimal(entry["FALLAMOUNTFOR_D"] ?? 0m);
-                    }
-
-                    var firstEntry = entryObjs.Cast<DynamicObject>().First();
-
-                    DynamicObject newPlan = new DynamicObject(payPlan.DynamicCollectionItemPropertyType);
-                    newPlan["ENDDATE"] = bill["FENDDATE_H"];
-                    newPlan["PAYAMOUNTFOR"] = Math.Round(totalAmountFor, 6);
-                    newPlan["FPAYRATE"] = 100m;
-                    newPlan["PAYAMOUNT"] = Math.Round(totalAmountFor, 6);
-                    newPlan["FWRITTENOFFSTATUS"] = "A";
-                    newPlan["FNOTVERIFICATEAMOUNT"] = Math.Round(totalAmountFor, 6);
-                    newPlan["FENTRYID"] = firstEntry["FENTRYID"];
-                    newPlan["FSEQ"] = 1;
-
-                    var payConditionObj = bill["PayConditon"] as DynamicObject;
-                    if (payConditionObj != null)
-                    {
-                        long payConditionId = Convert.ToInt64(payConditionObj["Id"]);
-                        string sql = $"SELECT FPAYMENTMETHOD FROM T_BD_PaymentCondition WHERE FID = {payConditionId}";
-                        DataSet ds = DBServiceHelper.ExecuteDataSet(ctx, sql);
-                        if (ds != null && ds.Tables.Count > 0 && ds.Tables[0].Rows.Count > 0)
+                        int paymentMethod = Convert.ToInt32(ds.Tables[0].Rows[0]["FPAYMENTMETHOD"]);
+                        if (paymentMethod == 2)
                         {
-                            int paymentMethod = Convert.ToInt32(ds.Tables[0].Rows[0]["FPAYMENTMETHOD"]);
-                            if (paymentMethod == 2)
-                            {
-                                newPlan["FPURCHASEORDERNO"] = firstEntry["FORDERNUMBER"];
-                            }
+                            newPlan["FPURCHASEORDERNO"] = firstEntry["FORDERNUMBER"];
                         }
                     }
-
-                    payPlan.Add(newPlan);
                 }
+
+                payPlan.Add(newPlan);
             }
         }
     }
