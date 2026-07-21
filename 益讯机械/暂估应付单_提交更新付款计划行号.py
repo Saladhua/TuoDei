@@ -1,10 +1,11 @@
-import clr
+﻿import clr
 clr.AddReference('System')
 clr.AddReference('System.Data')
 clr.AddReference('Kingdee.BOS')
 clr.AddReference('Kingdee.BOS.DataEntity')
 clr.AddReference('Kingdee.BOS.Core')
 clr.AddReference('Kingdee.BOS.App')
+clr.AddReference('Kingdee.BOS.App.Data')
 clr.AddReference('Kingdee.BOS.ServiceHelper')
 from Kingdee.BOS import *
 from Kingdee.BOS.Core import *
@@ -13,7 +14,7 @@ from Kingdee.BOS.Core.DynamicForm.PlugIn import *
 from Kingdee.BOS.Core.DynamicForm.PlugIn.Args import *
 from System import *
 from System.Data import *
-from Kingdee.BOS.ServiceHelper import *
+from Kingdee.BOS.App.Data import DBUtils
 from Kingdee.BOS.Orm.DataEntity import *
 
 
@@ -40,4 +41,4 @@ def BeforeDoOperation(e):
     firstEntryId = Convert.ToInt64(entries[0]["Id"])
 
     sql = "UPDATE T_AP_PAYABLEPLAN SET FENTRYID={0},FSEQ='1' WHERE FID={1} AND (FENTRYID IS NULL OR FENTRYID=0)".format(firstEntryId, billId)
-    DBServiceHelper.ExecuteDataSet(this.View.Context, sql)
+    DBUtils.Execute(this.View.Context, sql)
