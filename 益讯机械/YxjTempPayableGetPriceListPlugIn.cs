@@ -28,18 +28,6 @@ namespace kingdee.CustLI.Business.PlugIn
         private const string AcctTypeTemp = "2";
         private readonly HashSet<string> AllowDocStatus = new HashSet<string> { "Z", "A", "B", "D" };
 
-        private class EntryRef
-        {
-            public DynamicObject Bill;
-            public DynamicObject Entry;
-            public long SupplierId;
-            public long MaterialId;
-            public bool IncludedTax;
-            public string SourceType;
-            public string SourceBillNo;
-            public int PriceType;
-        }
-
         public override void BarItemClick(BarItemClickEventArgs e)
         {
             base.BarItemClick(e);
@@ -80,20 +68,37 @@ namespace kingdee.CustLI.Business.PlugIn
                     {
                         continue;
                     }
-                    //含税单价查询  select 查询
                     var matObj = view.Model.GetValue("FMATERIALID", i) as DynamicObject;
                     if (matObj == null)
                     {
                         continue;
                     }
+                    long materialId = Convert.ToInt64(matObj["Id"]);
 
+                    var supplierObj = view.Model.GetValue("FSUPPLIERID") as DynamicObject;
+                    if (supplierObj == null)
+                    {
+                        continue;
+                    }
+                    long supplierId = Convert.ToInt64(supplierObj["Id"]);
 
-                    //var priceList = DBUtils.ExecuteDynamicObject(this.Context,$@"select FTaxPrice from [dbo].[AP_Payable] where FMATERIALID");
+                    string sql = $@"
+                        SELECT TOP 1 a.FTAXPRICE
+                        FROM t_PUR_PriceListEntry a
+                        INNER JOIN t_PUR_PriceList b ON a.FID = b.FID
+                        WHERE a.FMATERIALID = {materialId}
+                          AND b.FSUPPLIERID = {supplierId}
+                          AND a.FDISABLESTATUS <> 'A'
+                        ORDER BY a.FEFFECTIVEDATE DESC";
 
+                    var priceObjs = DBUtils.ExecuteDynamicObject(this.Context, sql);
+                    decimal taxPrice = 0m;
+                    if (priceObjs != null && priceObjs.Count > 0 && priceObjs[0]["FTAXPRICE"] != DBNull.Value)
+                    {
+                        taxPrice = Convert.ToDecimal(priceObjs[0]["FTAXPRICE"]);
+                    }
 
-
-                    //调用表单操作 SetValue设置含税单价， 后触发值更新形成付款计划
-                    view.Model.SetValue("FTAXPRICE", 1850, i);
+                    view.Model.SetValue("FTAXPRICE", taxPrice, i);
                     view.InvokeFieldUpdateService("FTAXPRICE", i);
                 }
                 //这里调用保存
