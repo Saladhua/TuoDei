@@ -4,7 +4,6 @@ clr.AddReference('System.Data')
 clr.AddReference('Kingdee.BOS')
 clr.AddReference('Kingdee.BOS.DataEntity')
 clr.AddReference('Kingdee.BOS.Core')
-clr.AddReference('Kingdee.BOS.App')
 clr.AddReference('Kingdee.BOS.ServiceHelper')
 from Kingdee.BOS import *
 from Kingdee.BOS.Core import *
