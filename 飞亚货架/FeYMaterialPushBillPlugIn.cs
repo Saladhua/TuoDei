@@ -1,6 +1,6 @@
 using System;
 using System.ComponentModel;
-using Kingdee.BOS.App.Data;
+using Kingdee.BOS.ServiceHelper;
 using Kingdee.BOS.Core;
 using Kingdee.BOS.Util;
 using Kingdee.BOS.Core.Bill.PlugIn;
@@ -62,7 +62,7 @@ namespace kingdee.CustLI.Business.PlugIn
                 "/* kingdee.CustLI.Business.PlugIn.FeYMaterialPushBillPlugIn */ UPDATE T_BD_MATERIAL SET F_CustLi_PushState = '{0}', F_CustLIRemark = '{1}' WHERE FID = {2}",
                 newState, safeMessage, fid);
 
-            DBUtils.Execute(this.Context, updateSql);
+            DBServiceHelper.Execute(this.Context, updateSql);
 
             this.View.UpdateView("F_CustLi_PushState");
             this.View.UpdateView("F_CustLIRemark");

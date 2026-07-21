@@ -1,6 +1,5 @@
 using System;
 using System.ComponentModel;
-using Kingdee.BOS.App.Data;
 using Kingdee.BOS.Core;
 using Kingdee.BOS.Util;
 using Kingdee.BOS.Core.DynamicForm.PlugIn;
