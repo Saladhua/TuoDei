@@ -83,12 +83,13 @@ namespace kingdee.CustLI.Business.PlugIn
                     long supplierId = Convert.ToInt64(supplierObj["Id"]);
 
                     string sql = $@"
-                        SELECT TOP 1 a.FTAXPRICE
+                        SELECT a.FTAXPRICE
                         FROM t_PUR_PriceListEntry a
                         INNER JOIN t_PUR_PriceList b ON a.FID = b.FID
                         WHERE a.FMATERIALID = {materialId}
                           AND b.FSUPPLIERID = {supplierId}
                           AND a.FDISABLESTATUS <> 'A'
+                          AND a.FEFFECTIVEDATE <= GETDATE()
                         ORDER BY a.FEFFECTIVEDATE DESC";
 
                     var priceObjs = DBUtils.ExecuteDynamicObject(this.Context, sql);
