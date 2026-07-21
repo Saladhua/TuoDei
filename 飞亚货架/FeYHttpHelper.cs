@@ -10,16 +10,24 @@ namespace kingdee.CustLI.Business.PlugIn
 {
     internal static class FeYHttpHelper
     {
+        private const string ConfigFilePath = @"C:\Program Files (x86)\Kingdee\K3Cloud\CustAppConfig\App.config";
         private const string ConfigKey_Url = "FeY_MaterialPushUrl";
 
         internal static string GetPushUrl()
         {
-            string url = ConfigurationManager.AppSettings[ConfigKey_Url];
-            if (string.IsNullOrWhiteSpace(url))
+            if (!File.Exists(ConfigFilePath))
             {
                 return "";
             }
-            return url.TrimEnd('/');
+
+            var configMap = new ExeConfigurationFileMap
+            {
+                ExeConfigFilename = ConfigFilePath
+            };
+            var config = ConfigurationManager.OpenMappedExeConfiguration(
+                configMap, ConfigurationUserLevel.None);
+            var setting = config.AppSettings.Settings[ConfigKey_Url];
+            return setting?.Value?.TrimEnd('/') ?? "";
         }
 
         internal static (bool Success, string Message) PushMaterial(
