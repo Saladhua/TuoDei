@@ -180,9 +180,9 @@ namespace kingdee.CustLI.Business.PlugIn
 
                 decimal entryTaxPrice = Convert.ToDecimal(r.Entry["TaxPrice"]);
                 decimal entryPrice = Convert.ToDecimal(r.Entry["FPrice"]);
-                decimal allAmt = Math.Round(qty * entryTaxPrice, 6);
-                decimal taxAmt = Math.Round(qty * (entryTaxPrice - entryPrice), 6);
-                decimal noTaxAmt = Math.Round(allAmt - taxAmt, 6);
+                decimal noTaxAmt = Math.Round(qty * entryPrice, 2);
+                decimal allAmt = Math.Round(qty * entryTaxPrice, 2);
+                decimal taxAmt = allAmt - noTaxAmt;
 
                 r.Entry["FALLAMOUNTFOR_D"] = allAmt;
                 r.Entry["FNoTaxAmountFor_D"] = noTaxAmt;
