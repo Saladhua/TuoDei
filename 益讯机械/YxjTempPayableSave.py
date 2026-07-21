@@ -76,10 +76,6 @@ def _生成付款计划():
     - PAYAMOUNTFOR     → 物料分录价税合计之和，保留6位小数
     - FPAYRATE         → 固定100(百分比)
     - PAYAMOUNT        → 同PAYAMOUNTFOR
-    - FWRITTENOFFSTATUS → "A"(未核销)
-    - FNOTVERIFICATEAMOUNT → 同PAYAMOUNTFOR(未核销金额)
-    - FENTRYID         → 取第一条物料分录的FENTRYID
-    - FSEQ             → 固定1
     - FPURCHASEORDERNO → 仅当结算方式=2(订单结算)时，取第一条物料分录的订单号(FORDERNUMBER)
     """
     # 获取当前单据数据对象
@@ -118,10 +114,6 @@ def _生成付款计划():
     付款计划["PAYAMOUNTFOR"] = Decimal.Round(价税合计, 6)            # 应付金额
     付款计划["FPAYRATE"] = Decimal(100)                              # 付款比例(100%)
     付款计划["PAYAMOUNT"] = Decimal.Round(价税合计, 6)               # 付款金额
-    付款计划["FWRITTENOFFSTATUS"] = "A"                              # 核销状态：未核销
-    付款计划["FNOTVERIFICATEAMOUNT"] = Decimal.Round(价税合计, 6)    # 未核销金额
-    付款计划["FENTRYID"] = 第一条分录["FENTRYID"]                      # 关联第一条物料分录ID
-    付款计划["FSEQ"] = 1                                              # 序号
 
     # ----- 处理订单号(仅结算方式为2时才有) -----
     结算方式对象 = 单据["PayConditon"]
