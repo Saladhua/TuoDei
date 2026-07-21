@@ -1,4 +1,12 @@
-﻿import clr
+﻿# ============================================================
+# ⚠️ 已废弃 — 改用 C# 表单插件 YxjTempPayableSaveFormPlugIn
+#    或 Python 表单插件 暂估应付单_自动生成付款计划.py
+# 原因：操作服务插件时序太晚（BeforeExecuteOperationTransaction
+#    在平台校验之后），改用表单插件在客户端保存前生成数据。
+# 保留此文件仅作历史参考，请勿注册使用。
+# ============================================================
+
+import clr
 clr.AddReference('System')
 clr.AddReference('System.Data')
 clr.AddReference('Kingdee.BOS')
@@ -14,9 +22,8 @@ from Kingdee.BOS.ServiceHelper import *
 from System import *
 from System.Text import StringBuilder
 
-# 益讯机械-暂估应付单保存重算插件
+# 益讯机械-暂估应付单保存重算插件（已废弃）
 # 注册位置：AP_Payable 的 <OperationServicePlugins>，OperationName = "Save"
-# 触发时机：暂估应付单（立账类型 = 2）保存时
 # 功能：
 #   1. 付款计划重新赋值：存在付款计划则循环重新赋值（不清空、不新增、不删除）；
 #      不存在则新增1行（保留原C#逻辑）。
