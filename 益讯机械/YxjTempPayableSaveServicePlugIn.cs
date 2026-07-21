@@ -12,7 +12,8 @@ using Kingdee.BOS.Util;
 
 namespace kingdee.CustLI.Business.PlugIn
 {
-    [Description("益讯机械-暂估应付单保存自动生成付款计划"), HotUpdate]
+    [Obsolete("已废弃，改用 YxjTempPayableSaveFormPlugIn（表单插件 BeforeSave 方式）", false)]
+    [Description("益讯机械-暂估应付单保存自动生成付款计划(已废弃，改用表单插件)"), HotUpdate]
     public class YxjTempPayableSaveServicePlugIn : AbstractOperationServicePlugIn
     {
         private const string AcctTypeTemp = "2";
