@@ -55,7 +55,6 @@ namespace kingdee.CustLI.Business.PlugIn
             newPlan["PAYAMOUNTFOR"] = Math.Round(totalAmountFor, 6);
             newPlan["FPAYRATE"] = 100m;
             newPlan["PAYAMOUNT"] = Math.Round(totalAmountFor, 6);
- 
 
             var payConditionObj = bill["PayConditon"] as DynamicObject;
             if (payConditionObj != null)
