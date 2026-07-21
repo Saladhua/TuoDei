@@ -13,7 +13,7 @@ from Kingdee.BOS.Core.DynamicForm.PlugIn import *
 from Kingdee.BOS.Core.DynamicForm.PlugIn.Args import *
 from System import *
 from System.Data import *
-from Kingdee.BOS.App.Data import DBUtils
+from Kingdee.BOS.App import Data
 from Kingdee.BOS.Orm.DataEntity import *
 
 
@@ -40,5 +40,5 @@ def BeforeDoOperation(e):
     firstEntryId = Convert.ToInt64(entries[0]["Id"])
 
     sql = "/*dialect*/ UPDATE T_AP_PAYABLEPLAN SET FENTRYID={0},FSEQ='1' WHERE FID={1} AND (FENTRYID IS NULL OR FENTRYID=0)".format(firstEntryId, billId)
-    count = DBUtils.Execute(this.Context, sql)
+    count = Data.DBUtils.Execute(this.Context, sql)
     this.View.ShowMessage("付款计划行号更新成功，SQL: " + sql + "\n受影响行数: " + str(count))
