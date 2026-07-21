@@ -8,6 +8,7 @@ clr.AddReference('Kingdee.BOS.ServiceHelper')
 
 from Kingdee.BOS import *
 from Kingdee.BOS.Core import *
+from Kingdee.BOS.Core.DynamicForm import OperateResult
 from Kingdee.BOS.Orm.DataEntity import *
 from System import *
 from System.Data import *
