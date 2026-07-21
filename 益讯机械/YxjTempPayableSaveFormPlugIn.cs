@@ -10,7 +10,8 @@ using Kingdee.BOS.Util;
 
 namespace kingdee.CustLI.Business.PlugIn
 {
-    [Description("益讯机械-暂估应付单保存前自动生成付款计划"), HotUpdate]
+    [Obsolete("已废弃，改用Python插件 YxjTempPayableSave.py", false)]
+    [Description("益讯机械-暂估应付单保存前自动生成付款计划(已废弃，改用Python插件)"), HotUpdate]
     public class YxjTempPayableSaveFormPlugIn : AbstractBillPlugIn
     {
         public override void DataChanged(DataChangedEventArgs e)
