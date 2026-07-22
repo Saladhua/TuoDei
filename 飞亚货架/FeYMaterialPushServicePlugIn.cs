@@ -1,11 +1,11 @@
 using System;
 using System.ComponentModel;
-using Kingdee.BOS.Core;
-using Kingdee.BOS.Util;
-using Kingdee.BOS.Core.DynamicForm.PlugIn;
 using Kingdee.BOS.App.Data;
+using Kingdee.BOS.Core;
+using Kingdee.BOS.Core.DynamicForm.PlugIn;
 using Kingdee.BOS.Core.DynamicForm.PlugIn.Args;
 using Kingdee.BOS.Orm.DataEntity;
+using Kingdee.BOS.Util;
 
 namespace kingdee.CustLI.Business.PlugIn
 {
@@ -24,15 +24,15 @@ namespace kingdee.CustLI.Business.PlugIn
             e.FieldKeys.Add("F_CustLIRemark");
         }
 
-        public override void EndOperationTransaction(EndOperationTransactionArgs e)
+        public override void AfterExecuteOperationTransaction(AfterExecuteOperationTransaction e)
         {
-            base.EndOperationTransaction(e);
+            base.AfterExecuteOperationTransaction(e);
 
             foreach (DynamicObject bill in e.DataEntitys)
             {
                 if (bill == null) continue;
 
-                long fid = Convert.ToInt64(bill["ID"]);
+                long fid = Convert.ToInt64(bill["Id"]);
                 if (fid <= 0) continue;
 
                 string pushState = bill["F_CustLi_PushState"].ToString();
@@ -63,7 +63,7 @@ namespace kingdee.CustLI.Business.PlugIn
                     number, name, spec, unitNumber, categoryName);
 
                 string newState = success ? "2" : "3";
-                string safeMessage = (message ?? "").Replace("'", "''");
+                string safeMessage = message == null ? "" : message.Replace("'", "''");
 
                 string updateSql = string.Format(
                     "UPDATE T_BD_MATERIAL SET F_CustLi_PushState = '{0}', F_CustLIRemark = '{1}' WHERE FMATERIALID = {2}",
