@@ -406,15 +406,10 @@ namespace kingdee.CustLI.Business.PlugInWebApi
                     }
                     break;
                 case "STK_TransferDirect_In":
-                    foreach (var item in dataList)
-                    {
-                        modelArr.Add(BuildTransferInModel(item as JObject));
-                    }
-                    break;
                 case "STK_TransferDirect_Out":
                     foreach (var item in dataList)
                     {
-                        modelArr.Add(BuildTransferOutModel(item as JObject));
+                        modelArr.Add(BuildTransferDirectModel(item as JObject));
                     }
                     break;
                 default:
@@ -537,49 +532,90 @@ namespace kingdee.CustLI.Business.PlugInWebApi
             obj.Add(key, value);
         }
 
-        private JObject BuildTransferInModel(JObject item)
+        private JObject BuildTransferDirectModel(JObject item)
         {
-            JObject model = new JObject();
-            model.Add("FID", 0);
-            model.Add("FBillTypeID", Creat_JsonChildObject("FNUMBER", GetDefaultBillType("STK_TransferDirect")));
-            model.Add("FStockOrgId", Creat_JsonChildObject("FNumber", GetDefaultOrg()));
-            model.Add("FTransferDirect", "1");
-            model.Add("FDate", DateTime.Now.ToString("yyyy-MM-dd"));
+            string materialNumber = item["FMaterialNumber"] != null ? item["FMaterialNumber"].ToString() : "";
+            string srcStockNumber = item["FSrcStockNumber"] != null ? item["FSrcStockNumber"].ToString() : "";
+            string destStockNumber = item["FDestStockNumber"] != null ? item["FDestStockNumber"].ToString() : "";
+            string lot = item["FLot"] != null ? item["FLot"].ToString() : "";
+            decimal qty = ParseQty(item["FQty"]);
+            string nowStr = DateTime.Now.ToString("yyyy-MM-dd 00:00:00");
+
+            JObject entry = new JObject();
+            entry.Add("FRowType", "Standard");
+            entry.Add("FMaterialId", Creat_JsonChildObject("FNumber", materialNumber));
+            entry.Add("FUnitID", Creat_JsonChildObject("FNumber", "Pcs"));
+            entry.Add("FQty", qty);
+            entry.Add("FSrcStockId", Creat_JsonChildObject("FNumber", srcStockNumber));
+            entry.Add("FDestStockId", Creat_JsonChildObject("FNumber", destStockNumber));
+            entry.Add("FSrcStockStatusId", Creat_JsonChildObject("FNumber", "KCZT01_SYS"));
+            entry.Add("FDestStockStatusId", Creat_JsonChildObject("FNumber", "KCZT01_SYS"));
+            entry.Add("FBusinessDate", nowStr);
+            entry.Add("FSrcBillTypeId", "");
+            entry.Add("FOwnerTypeOutId", "BD_OwnerOrg");
+            entry.Add("FOwnerOutId", Creat_JsonChildObject("FNumber", "100"));
+            entry.Add("FOwnerTypeId", "BD_OwnerOrg");
+            entry.Add("FOwnerId", Creat_JsonChildObject("FNumber", "100"));
+            entry.Add("FSrcBillNo", "");
+            entry.Add("FSecQty", 0.0);
+            entry.Add("FExtAuxUnitQty", 0.0);
+            entry.Add("FBaseUnitId", Creat_JsonChildObject("FNumber", "Pcs"));
+            entry.Add("FBaseQty", qty);
+            entry.Add("FISFREE", false);
+            entry.Add("FKeeperTypeId", "BD_KeeperOrg");
+            entry.Add("FActQty", 0.0);
+            entry.Add("FKeeperId", Creat_JsonChildObject("FNumber", "100"));
+            entry.Add("FKeeperTypeOutId", "BD_KeeperOrg");
+            entry.Add("FKeeperOutId", Creat_JsonChildObject("FNumber", "100"));
+            entry.Add("FDiscountRate", 0.0);
+            entry.Add("FRepairQty", 0.0);
+            entry.Add("FDestMaterialId", Creat_JsonChildObject("FNUMBER", materialNumber));
+            entry.Add("FSaleUnitId", Creat_JsonChildObject("FNumber", "Pcs"));
+            entry.Add("FSaleQty", qty);
+            entry.Add("FSalBaseQty", qty);
+            entry.Add("FPriceUnitID", Creat_JsonChildObject("FNumber", "Pcs"));
+            entry.Add("FPriceQty", qty);
+            entry.Add("FPriceBaseQty", qty);
+            entry.Add("FOutJoinQty", 0.0);
+            entry.Add("FBASEOUTJOINQTY", 0.0);
+            entry.Add("FSOEntryId", 0);
+            entry.Add("FTransReserveLink", false);
+            entry.Add("FQmEntryId", 0);
+            entry.Add("FConvertEntryId", 0);
+            entry.Add("FCheckDelivery", false);
+            entry.Add("FBomEntryId", 0);
+            if (!string.IsNullOrEmpty(lot))
+            {
+                entry.Add("FLot", Creat_JsonChildObject("FNumber", lot));
+            }
 
             JArray entryArr = new JArray();
-            JObject entry = new JObject();
-            entry.Add("FEntryID", 0);
-            entry.Add("FMaterialId", Creat_JsonChildObject("FNumber", item["FMaterialNumber"] != null ? item["FMaterialNumber"].ToString() : ""));
-            entry.Add("FSrcStockId", Creat_JsonChildObject("FNumber", item["FSrcStockNumber"] != null ? item["FSrcStockNumber"].ToString() : ""));
-            entry.Add("FDestStockId", Creat_JsonChildObject("FNumber", item["FDestStockNumber"] != null ? item["FDestStockNumber"].ToString() : ""));
-            entry.Add("FLot", Creat_JsonChildObject("FNumber", item["FLot"] != null ? item["FLot"].ToString() : ""));
-            entry.Add("FQty", ParseQty(item["FQty"]));
             entryArr.Add(entry);
 
-            model.Add("FEntity", entryArr);
-            return model;
-        }
-
-        private JObject BuildTransferOutModel(JObject item)
-        {
             JObject model = new JObject();
             model.Add("FID", 0);
-            model.Add("FBillTypeID", Creat_JsonChildObject("FNUMBER", GetDefaultBillType("STK_TransferDirect")));
-            model.Add("FStockOrgId", Creat_JsonChildObject("FNumber", GetDefaultOrg()));
-            model.Add("FTransferDirect", "2");
-            model.Add("FDate", DateTime.Now.ToString("yyyy-MM-dd"));
+            model.Add("FBillTypeID", Creat_JsonChildObject("FNUMBER", "ZJDB01_SYS"));
+            model.Add("FBizType", "NORMAL");
+            model.Add("FTransferDirect", "GENERAL");
+            model.Add("FTransferBizType", "InnerOrgTransfer");
+            model.Add("FSettleOrgId", Creat_JsonChildObject("FNumber", "100"));
+            model.Add("FSaleOrgId", Creat_JsonChildObject("FNumber", "100"));
+            model.Add("FStockOutOrgId", Creat_JsonChildObject("FNumber", "100"));
+            model.Add("FOwnerTypeOutIdHead", "BD_OwnerOrg");
+            model.Add("FOwnerOutIdHead", Creat_JsonChildObject("FNumber", "100"));
+            model.Add("FStockOrgId", Creat_JsonChildObject("FNumber", "100"));
+            model.Add("FIsIncludedTax", true);
+            model.Add("FIsPriceExcludeTax", true);
+            model.Add("FExchangeTypeId", Creat_JsonChildObject("FNUMBER", "HLTX01_SYS"));
+            model.Add("FOwnerTypeIdHead", "BD_OwnerOrg");
+            model.Add("FSETTLECURRID", Creat_JsonChildObject("FNUMBER", "PRE001"));
+            model.Add("FExchangeRate", 1.0);
+            model.Add("FOwnerIdHead", Creat_JsonChildObject("FNumber", "100"));
+            model.Add("FDate", nowStr);
+            model.Add("FBaseCurrId", Creat_JsonChildObject("FNumber", "PRE001"));
+            model.Add("FWriteOffConsign", false);
+            model.Add("FBillEntry", entryArr);
 
-            JArray entryArr = new JArray();
-            JObject entry = new JObject();
-            entry.Add("FEntryID", 0);
-            entry.Add("FMaterialId", Creat_JsonChildObject("FNumber", item["FMaterialNumber"] != null ? item["FMaterialNumber"].ToString() : ""));
-            entry.Add("FSrcStockId", Creat_JsonChildObject("FNumber", item["FSrcStockNumber"] != null ? item["FSrcStockNumber"].ToString() : ""));
-            entry.Add("FDestStockId", Creat_JsonChildObject("FNumber", "21"));
-            entry.Add("FLot", Creat_JsonChildObject("FNumber", item["FLot"] != null ? item["FLot"].ToString() : ""));
-            entry.Add("FQty", ParseQty(item["FQty"]));
-            entryArr.Add(entry);
-
-            model.Add("FEntity", entryArr);
             return model;
         }
 
