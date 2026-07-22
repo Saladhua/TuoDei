@@ -157,13 +157,7 @@ namespace kingdee.CustLI.Business.PlugInWebApi
 
 
         public JObject ExecuteService(JObject request)
-        {
-
-            ctx =
-
-
-
-
+        { 
             try
             {
                 if (request["request"] != null)
