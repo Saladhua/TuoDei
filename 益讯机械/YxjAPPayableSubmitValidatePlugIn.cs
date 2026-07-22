@@ -38,6 +38,7 @@ namespace kingdee.CustLI.Business.PlugIn
             e.FieldKeys.Add("FTAXPRICE");                 // 发票含税单价
             e.FieldKeys.Add("FPrice");                    // 发票单价（不含税）
             e.FieldKeys.Add("F_CustLi_PriceListTaxPrice"); // 价目表价格
+            e.FieldKeys.Add("FSUPPLIERID");             // 供应商（表头，判断是否是零星采购）
         }
 
 
@@ -56,6 +57,14 @@ namespace kingdee.CustLI.Business.PlugIn
                 // 仅财务应付单（立账类型 = 3）
                 string acctType = (bill["FSETACCOUNTTYPE"] == null) ? string.Empty : bill["FSETACCOUNTTYPE"].ToString();
                 if (acctType != AcctTypeFinance)
+                {
+                    continue;
+                }
+
+                // 供应商为"零星采购"时，整单不参与校验
+                DynamicObject supplier = bill["FSUPPLIERID"] as DynamicObject;
+                string supplierName = supplier == null ? "" : (supplier["FName"] == null ? "" : supplier["FName"].ToString());
+                if (supplierName == "零星采购")
                 {
                     continue;
                 }
