@@ -62,8 +62,9 @@ namespace kingdee.CustLI.Business.PlugIn
                 }
 
                 // 供应商为"零星采购"时，整单不参与校验
-                DynamicObject supplier = bill["FSUPPLIERID"] as DynamicObject;
-                string supplierName = supplier == null ? "" : (supplier["FName"] == null ? "" : supplier["FName"].ToString());
+                DynamicObject supplier = bill["SUPPLIERID"] as DynamicObject;
+
+                string supplierName = supplier == null ? "" : (supplier["Name"] == null ? "" : supplier["Name"].ToString());
                 if (supplierName == "零星采购")
                 {
                     continue;
