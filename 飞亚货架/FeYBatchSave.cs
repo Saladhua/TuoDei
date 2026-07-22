@@ -123,18 +123,21 @@
  * 接口文档：加工区/飞亚货架对接/接口文档.md
  */
 
+using Kingdee.BOS;
+using Kingdee.BOS.App.Data;
+using Kingdee.BOS.Core.DynamicForm;
+using Kingdee.BOS.Orm.DataEntity;
+using Kingdee.BOS.ServiceFacade.KDServiceFx;
+using Kingdee.BOS.WebApi.ServicesStub;
+using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
+using NPOI.OpenXmlFormats.Spreadsheet;
 using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Net;
 using System.Text;
 using System.Web;
-using Kingdee.BOS;
-using Kingdee.BOS.Core.DynamicForm;
-using Kingdee.BOS.ServiceFacade.KDServiceFx;
-using Kingdee.BOS.WebApi.ServicesStub;
-using Newtonsoft.Json;
-using Newtonsoft.Json.Linq;
 
 namespace kingdee.CustLI.Business.PlugInWebApi
 {
@@ -152,8 +155,15 @@ namespace kingdee.CustLI.Business.PlugInWebApi
         {
         }
 
+
         public JObject ExecuteService(JObject request)
         {
+
+            ctx =
+
+
+
+
             try
             {
                 if (request["request"] != null)
@@ -432,6 +442,18 @@ namespace kingdee.CustLI.Business.PlugInWebApi
 
             var (moFid, moEntryId) = GetMoIds(moBillNo, materialNumber);
 
+            string workShopNumber = "";
+            string sql = $@"SELECT d.FNUMBER AS FWORKSHOPNUMBER
+                    FROM T_BD_MATERIAL a1
+                    LEFT JOIN T_BD_MATERIALPRODUCE a2 ON a1.FMATERIALID = a2.FMATERIALID
+                    LEFT JOIN T_BD_DEPARTMENT d ON a2.FWorkShopId = d.FDEPTID
+                    WHERE a1.FNUMBER = '{materialNumber}'";
+            DynamicObjectCollection conStr = DBUtils.ExecuteDynamicObject(this.KDContext.Session.AppContext, sql);
+            if (conStr != null && conStr.Count > 0)
+            {
+                workShopNumber = conStr[0]["FWORKSHOPNUMBER"].ToString();
+            }
+
             JObject model = new JObject();
             AddField(model, "FBillType", Creat_JsonChildObject("FNUMBER", "SCRKD02_SYS"));
             AddField(model, "FDate", DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss"));
@@ -457,7 +479,10 @@ namespace kingdee.CustLI.Business.PlugInWebApi
             AddField(entry, "FOwnerTypeId", "BD_OwnerOrg");
             AddField(entry, "FOwnerId", Creat_JsonChildObject("FNumber", "100"));
             AddField(entry, "FStockId", Creat_JsonChildObject("FNumber", stockNumber));
-            AddField(entry, "FWorkShopId1", Creat_JsonChildObject("FNumber", "BM000004"));
+            if (!string.IsNullOrEmpty(workShopNumber))
+            {
+                AddField(entry, "FWorkShopId1", Creat_JsonChildObject("FNumber", workShopNumber));
+            }
             AddField(entry, "FMoBillNo", moBillNo);
             AddField(entry, "FMoId", moFid);
             AddField(entry, "FMoEntryId", moEntryId);
