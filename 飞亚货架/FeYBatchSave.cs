@@ -6,7 +6,39 @@
  * ──────────────────────────────────────────
  *   http://127.0.0.1/k3cloud/kingdee.CustLI.Business.PlugInWebApi.FeYBatchSave.ExecuteService,kingdee.CustLI.Business.PlugIn.common.kdsvc
  *
- *   请求体示例（生产入库单 — PRD_INSTOCK），整体包在 request 节点下：
+ *   请求体示例（生产入库单 — PRD_INSTOCK / 直接调拨单 — STK_TransferDirect_In/Out），整体包在 request 节点下：
+ *   {
+ *     "request": {
+ *       "DBID": "6979e702b71b4c",
+ *       "UserName": "kd01",
+ *       "Password": "123qwe..",
+ *       "FormId": "STK_TransferDirect_In",
+ *       "DataList": [
+ *         {
+ *           "FMaterialNumber": "801147016108",
+ *           "FSrcStockNumber": "CK001",
+ *           "FDestStockNumber": "csTest",
+ *           "FLot": "",
+ *           "FQty": 1
+ *         }
+ *       ]
+ *     }
+ *   }
+ *
+ *   【DataList 字段说明】
+ *   ┌──────────────────────┬────────────────────────────────────────────────────┬──────────┐
+ *   │ 字段                 │ 适用单据                                            │ 必填     │
+ *   ├──────────────────────┼────────────────────────────────────────────────────┼──────────┤
+ *   │ FMaterialNumber      │ PRD_INSTOCK / STK_TransferDirect_In/Out           │ ✅       │
+ *   │ FSrcBillNo           │ PRD_INSTOCK（生产订单号）                           │ ✅       │
+ *   │ FSrcStockNumber      │ STK_TransferDirect_In/Out（调出仓库）              │ ✅       │
+ *   │ FDestStockNumber     │ STK_TransferDirect_In/Out（调入仓库）              │ ✅       │
+ *   │ FStockNumber         │ PRD_INSTOCK（仓库）                                │ ✅       │
+ *   │ FLot                 │ 全部（批号）                                       │ ❌       │
+ *   │ FQty                 │ 全部（数量）                                       │ ✅       │
+ *   └──────────────────────┴────────────────────────────────────────────────────┴──────────┘
+ *
+ *   PRD_INSTOCK 请求体示例：
  *   {
  *     "request": {
  *       "DBID": "6979e702b71b4c",
