@@ -534,26 +534,30 @@ namespace kingdee.CustLI.Business.PlugInWebApi
                     break;
 
                 case "STK_TransferDirect_In":
+                {
+                    JObject model = BuildTransferDirectHeader();
+                    JArray entryArr = new JArray();
                     foreach (var item in dataList)
                     {
-                        JObject model = BuildTransferDirectHeader();
-                        JArray entryArr = new JArray();
                         entryArr.Add(BuildTransferDirectEntry(item as JObject));
-                        model.Add("FBillEntry", entryArr);
-                        modelArr.Add(model);
                     }
-                    break;
+                    model.Add("FBillEntry", entryArr);
+                    modelArr.Add(model);
+                }
+                break;
 
                 case "STK_TransferDirect_Out":
+                {
+                    JObject model = BuildTransferDirectHeader();
+                    JArray entryArr = new JArray();
                     foreach (var item in dataList)
                     {
-                        JObject model = BuildTransferDirectHeader();
-                        JArray entryArr = new JArray();
                         entryArr.Add(BuildTransferDirectEntry(item as JObject));
-                        model.Add("FBillEntry", entryArr);
-                        modelArr.Add(model);
                     }
-                    break;
+                    model.Add("FBillEntry", entryArr);
+                    modelArr.Add(model);
+                }
+                break;
 
                 default:
                     // 不支持的 FormId
