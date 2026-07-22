@@ -75,8 +75,7 @@
  * 二、支持的单据类型（通过 FormId 区分）
  * ──────────────────────────────────────────
  *   PRD_INSTOCK             - 生产入库单（由生产订单汇总生成，只保存不提交/审核）
- *   STK_TransferDirect_In   - 直接调拨单（入库方向，只保存不提交/审核）
- *   STK_TransferDirect_Out  - 直接调拨单（出库方向，只保存不提交/审核）
+ *   STK_TransferDirect      - 直接调拨单（只保存不提交/审核）
  *
  * ──────────────────────────────────────────
  * 三、业务说明
@@ -174,8 +173,8 @@ using System.Web;
 namespace kingdee.CustLI.Business.PlugInWebApi
 {
     /// <summary>
-    /// 飞亚货架对接 WebAPI — 批量保存接口
-    /// 支持直接调拨单（STK_TransferDirect_In/Out）和生产入库单（PRD_INSTOCK）的 BatchSave
+/// 飞亚货架对接 WebAPI — 批量保存接口
+/// 支持直接调拨单（STK_TransferDirect）和生产入库单（PRD_INSTOCK）的 BatchSave
     /// </summary>
     public class FeYBatchSave : AbstractWebApiBusinessService
     {
@@ -269,8 +268,9 @@ namespace kingdee.CustLI.Business.PlugInWebApi
                     return BuildResult(false, batchJson, 0, 0, new JArray());
                 }
 
-                // 调用金蝶 BatchSave 接口
-                string rawResult = BatchSaveCall(formId, batchJson);
+                // 调用金蝶 BatchSave 接口（统一使用 STK_TransferDirect 作为单据标识）
+                string apiFormId = "STK_TransferDirect";
+                string rawResult = BatchSaveCall(apiFormId, batchJson);
                 // 将金蝶原生返回结果映射为统一格式
                 return MapBatchSaveResult(rawResult, dataList.Count);
             }
@@ -534,19 +534,8 @@ namespace kingdee.CustLI.Business.PlugInWebApi
                     break;
 
                 case "STK_TransferDirect_In":
-                {
-                    JObject model = BuildTransferDirectHeader();
-                    JArray entryArr = new JArray();
-                    foreach (var item in dataList)
-                    {
-                        entryArr.Add(BuildTransferDirectEntry(item as JObject));
-                    }
-                    model.Add("FBillEntry", entryArr);
-                    modelArr.Add(model);
-                }
-                break;
-
                 case "STK_TransferDirect_Out":
+                case "STK_TransferDirect":
                 {
                     JObject model = BuildTransferDirectHeader();
                     JArray entryArr = new JArray();
