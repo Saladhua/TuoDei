@@ -31,28 +31,28 @@ namespace kingdee.CustLI.Business.PlugIn
             {
                 if (bill == null) continue;
 
-                long fid = Convert.ToInt64(bill["FID"] ?? 0L);
+                long fid = Convert.ToInt64(bill["ID"]);
                 if (fid <= 0) continue;
 
-                string pushState = bill["F_CustLi_PushState"] != null ? bill["F_CustLi_PushState"].ToString() : "";
+                string pushState = bill["F_CustLi_PushState"].ToString();
                 if (pushState == "2") continue;
 
-                string number = bill["FNumber"] != null ? bill["FNumber"].ToString() : "";
+                string number = bill["FNumber"].ToString();
                 if (string.IsNullOrEmpty(number)) continue;
 
-                string name = bill["FName"] != null ? bill["FName"].ToString() : "";
-                string spec = bill["FSpecification"] != null ? bill["FSpecification"].ToString() : "";
+                string name = bill["FName"].ToString();
+                string spec = bill["FSpecification"].ToString();
 
                 string unitNumber = "";
                 if (bill["FBaseUnitId"] is DynamicObject unitObj)
                 {
-                    unitNumber = unitObj["FNumber"] != null ? unitObj["FNumber"].ToString() : "";
+                    unitNumber = unitObj["FNumber"].ToString();
                 }
 
                 string categoryName = "";
                 if (bill["FMaterialGroup"] is DynamicObject catObj)
                 {
-                    categoryName = catObj["FName"] != null ? catObj["FName"].ToString() : "";
+                    categoryName = catObj["FName"].ToString();
                 }
 
                 var (success, message) = FeYHttpHelper.PushMaterial(
