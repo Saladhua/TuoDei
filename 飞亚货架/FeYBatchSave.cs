@@ -303,7 +303,7 @@ namespace kingdee.CustLI.Business.PlugInWebApi
                 string apiFormId = "STK_TransferDirect";
                 string rawResult = BatchSaveCall(apiFormId, batchJson);
                 // 将金蝶原生返回结果映射为统一格式
-                return MapBatchSaveResult(rawResult, dataList.Count);
+                return MapBatchSaveResult(rawResult, 1);
             }
             catch (Exception ex)
             {
@@ -936,8 +936,6 @@ namespace kingdee.CustLI.Business.PlugInWebApi
                     successEntities != null ? successEntities.Count : 0,
                     errors != null ? errors.Count : 0
                 );
-                maxItems = Math.Max(maxItems, totalCount);
-
                 for (int i = 0; i < maxItems; i++)
                 {
                     JObject detail = new JObject();
