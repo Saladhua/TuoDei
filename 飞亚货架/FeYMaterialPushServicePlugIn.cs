@@ -3,6 +3,7 @@ using System.ComponentModel;
 using Kingdee.BOS.Core;
 using Kingdee.BOS.Util;
 using Kingdee.BOS.Core.DynamicForm.PlugIn;
+using Kingdee.BOS.App.Data;
 using Kingdee.BOS.Core.DynamicForm.PlugIn.Args;
 using Kingdee.BOS.Orm.DataEntity;
 
@@ -64,8 +65,10 @@ namespace kingdee.CustLI.Business.PlugIn
                 string newState = success ? "2" : "3";
                 string safeMessage = (message ?? "").Replace("'", "''");
 
-                bill["F_CustLi_PushState"] = newState;
-                bill["F_CustLIRemark"] = safeMessage;
+                string updateSql = string.Format(
+                    "UPDATE T_BD_MATERIAL SET F_CustLi_PushState = '{0}', F_CustLIRemark = '{1}' WHERE FMATERIALID = {2}",
+                    newState, safeMessage, fid);
+                DBUtils.ExecuteDynamicObject(this.Context, updateSql);
             }
         }
     }
