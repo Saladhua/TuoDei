@@ -17,7 +17,7 @@ namespace kingdee.CustLI.Business.PlugIn
             e.FieldKeys.Add("FNumber");
             e.FieldKeys.Add("FName");
             e.FieldKeys.Add("FSpecification");
-            e.FieldKeys.Add("FBaseUnitId");
+            e.FieldKeys.Add("MaterialBase");
             e.FieldKeys.Add("FMaterialGroup");
             e.FieldKeys.Add("F_CustLi_PushState");
             e.FieldKeys.Add("F_CustLIRemark");
@@ -37,32 +37,35 @@ namespace kingdee.CustLI.Business.PlugIn
                 string pushState = bill["F_CustLi_PushState"].ToString();
                 if (pushState == "2") continue;
 
-                string number = bill["FNumber"].ToString();
+                string number = bill["Number"].ToString();
                 if (string.IsNullOrEmpty(number)) continue;
 
-                string name = bill["FName"].ToString();
-                string spec = bill["FSpecification"].ToString();
+                string name = bill["Name"].ToString();
+                string spec = bill["Specification"].ToString();
 
                 string unitNumber = "";
-                if (bill["FBaseUnitId"] is DynamicObject unitObj)
+                if (bill["MaterialBase"] is DynamicObject matBase)
                 {
-                    unitNumber = unitObj["FNumber"].ToString();
+                    if (matBase["BaseUnitId"] is DynamicObject unitObj)
+                    {
+                        unitNumber = unitObj["Number"].ToString();
+                    }
                 }
 
                 string categoryName = "";
-                if (bill["FMaterialGroup"] is DynamicObject catObj)
+                if (bill["MaterialGroup"] is DynamicObject catObj)
                 {
-                    categoryName = catObj["FName"].ToString();
+                    categoryName = catObj["Name"].ToString();
                 }
 
-                var (success, message) = FeYHttpHelper.PushMaterial(
-                    number, name, spec, unitNumber, categoryName);
+                //var (success, message) = FeYHttpHelper.PushMaterial(
+                //    number, name, spec, unitNumber, categoryName);
 
-                string newState = success ? "2" : "3";
-                string safeMessage = (message ?? "").Replace("'", "''");
+                //string newState = success ? "2" : "3";
+                //string safeMessage = (message ?? "").Replace("'", "''");
 
-                bill["F_CustLi_PushState"] = newState;
-                bill["F_CustLIRemark"] = safeMessage;
+                //bill["F_CustLi_PushState"] = newState;
+                //bill["F_CustLIRemark"] = safeMessage;
             }
         }
     }
