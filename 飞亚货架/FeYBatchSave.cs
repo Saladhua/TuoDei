@@ -173,13 +173,21 @@ using System.Web;
 
 namespace kingdee.CustLI.Business.PlugInWebApi
 {
+    /// <summary>
+    /// 飞亚货架对接 WebAPI — 批量保存接口
+    /// 支持直接调拨单（STK_TransferDirect_In/Out）和生产入库单（PRD_INSTOCK）的 BatchSave
+    /// </summary>
     public class FeYBatchSave : AbstractWebApiBusinessService
     {
+        // 金蝶 Cloud 本地地址
         private const string CloudUrl = "http://localhost/k3cloud/";
 
+        // 登录凭据
         private string _dbId;
         private string _userName;
         private string _password;
+
+        // 登录成功后保存 Cookie，后续请求携带此 Cookie 保持会话
         private CookieContainer _cookieContainer;
 
         public FeYBatchSave(KDServiceContext context)
@@ -187,20 +195,32 @@ namespace kingdee.CustLI.Business.PlugInWebApi
         {
         }
 
-
+        /// <summary>
+        /// WebAPI 统一入口
+        /// 1. 拆包取出 request 节点
+        /// 2. 参数校验（DBID/UserName/Password/FormId/DataList）
+        /// 3. 登录鉴权
+        /// 4. 校验 DataList 数据合法性
+        /// 5. 根据 FormId 分发构建 BatchSave JSON
+        /// 6. 调用金蝶 BatchSave 接口
+        /// 7. 映射返回结果
+        /// </summary>
         public JObject ExecuteService(JObject request)
-        { 
+        {
             try
             {
+                // 请求体固定包在 request 节点下，拆包处理
                 if (request["request"] != null)
                 {
                     request = request["request"] as JObject ?? request;
                 }
 
+                // 提取登录参数
                 _dbId = request["DBID"] != null ? request["DBID"].ToString() : "";
                 _userName = request["UserName"] != null ? request["UserName"].ToString() : "";
                 _password = request["Password"] != null ? request["Password"].ToString() : "";
 
+                // 参数非空校验
                 if (string.IsNullOrEmpty(_dbId))
                 {
                     return BuildResult(false, "DBID(账套Id) 不能为空", 0, 0, new JArray());
@@ -210,11 +230,13 @@ namespace kingdee.CustLI.Business.PlugInWebApi
                     return BuildResult(false, "UserName/Password 不能为空", 0, 0, new JArray());
                 }
 
+                // 登录鉴权
                 if (!Login(_dbId, _userName, _password))
                 {
                     return BuildResult(false, "账套登录鉴权失败，请检查 DBID/UserName/Password", 0, 0, new JArray());
                 }
 
+                // 提取业务参数
                 string formId = request["FormId"] != null ? request["FormId"].ToString() : "";
                 JArray dataList = request["DataList"] as JArray;
 
@@ -228,23 +250,28 @@ namespace kingdee.CustLI.Business.PlugInWebApi
                     return BuildResult(false, "DataList 不能为空", 0, 0, new JArray());
                 }
 
+                // 校验 DataList 中每行数据的合法性（物料编号非空、数量>0）
                 string qtyCheckMsg = ValidateDataList(dataList);
                 if (!string.IsNullOrEmpty(qtyCheckMsg))
                 {
                     return BuildResult(false, qtyCheckMsg, 0, 0, new JArray());
                 }
 
+                // 根据 FormId 构建 BatchSave 所需的 JSON Model 数组
                 string batchJson = BuildBatchSaveJson(formId, dataList);
                 if (batchJson == null)
                 {
                     return BuildResult(false, "不支持的 FormId: " + formId, 0, 0, new JArray());
                 }
+                // 如果返回的不是 JSON 对象（以 { 开头），说明有校验错误信息直接返回
                 if (!batchJson.TrimStart().StartsWith("{"))
                 {
                     return BuildResult(false, batchJson, 0, 0, new JArray());
                 }
 
+                // 调用金蝶 BatchSave 接口
                 string rawResult = BatchSaveCall(formId, batchJson);
+                // 将金蝶原生返回结果映射为统一格式
                 return MapBatchSaveResult(rawResult, dataList.Count);
             }
             catch (Exception ex)
@@ -253,23 +280,36 @@ namespace kingdee.CustLI.Business.PlugInWebApi
             }
         }
 
+        /// <summary>
+        /// 调用金蝶 AuthService.ValidateUser 做登录鉴权
+        /// 登录成功后保存 CookieContainer 供后续请求使用
+        /// </summary>
+        /// <param name="dbId">账套 ID</param>
+        /// <param name="userName">用户名</param>
+        /// <param name="password">密码</param>
+        /// <returns>true=登录成功</returns>
         private bool Login(string dbId, string userName, string password)
         {
+            // 每次登录初始化新的 Cookie 容器
             _cookieContainer = new CookieContainer();
 
+            // 金蝶登录鉴权接口地址
             string url = string.Concat(CloudUrl, "Kingdee.BOS.WebApi.ServicesStub.AuthService.ValidateUser.common.kdsvc");
+
+            // 参数列表：[dbId, userName, password, lcId]
             List<object> parameters = new List<object>();
             parameters.Add(dbId);
             parameters.Add(userName);
             parameters.Add(password);
             parameters.Add(2052);
+
             string content = JsonConvert.SerializeObject(parameters);
 
             try
             {
                 string result = HttpPost(url, content);
+                // LoginResultType=1 表示登录成功
                 var iResult = JObject.Parse(result)["LoginResultType"].Value<int>();
-
                 return iResult == 1;
             }
             catch (Exception e)
@@ -278,6 +318,12 @@ namespace kingdee.CustLI.Business.PlugInWebApi
             }
         }
 
+        /// <summary>
+        /// 校验 DataList 中每行数据的合法性
+        /// 规则：物料编号不能为空，数量必须 > 0
+        /// </summary>
+        /// <param name="dataList">待校验的数据列表</param>
+        /// <returns>空字符串=全部通过，非空=错误信息</returns>
         private string ValidateDataList(JArray dataList)
         {
             List<string> errors = new List<string>();
@@ -286,6 +332,7 @@ namespace kingdee.CustLI.Business.PlugInWebApi
                 JObject item = dataList[i] as JObject;
                 if (item == null) continue;
 
+                // 检查物料编号
                 string materialNumber = item["FMaterialNumber"] != null ? item["FMaterialNumber"].ToString() : "";
                 if (string.IsNullOrEmpty(materialNumber))
                 {
@@ -293,6 +340,7 @@ namespace kingdee.CustLI.Business.PlugInWebApi
                     continue;
                 }
 
+                // 检查数量 <= 0
                 decimal qty = ParseQty(item["FQty"]);
                 if (qty <= 0)
                 {
@@ -301,10 +349,12 @@ namespace kingdee.CustLI.Business.PlugInWebApi
             }
 
             if (errors.Count == 0) return "";
-
             return "存在数量为0或无效的物料：" + string.Join("；", errors);
         }
 
+        /// <summary>
+        /// 安全解析数量值，转换失败返回 0
+        /// </summary>
         private decimal ParseQty(JToken qtyToken)
         {
             if (qtyToken == null) return 0m;
@@ -316,13 +366,23 @@ namespace kingdee.CustLI.Business.PlugInWebApi
             return 0m;
         }
 
+        /// <summary>
+        /// 根据生产订单号+物料编码查询金蝶，获取 FID 和分录 FEntryId
+        /// 用于生产入库单与上游生产订单建立关联
+        /// </summary>
+        /// <param name="moBillNo">生产订单号</param>
+        /// <param name="materialNumber">物料编码</param>
+        /// <returns>(fid, fentryId)，查不到返回 (0,0)</returns>
         private (long fid, long fentryId) GetMoIds(string moBillNo, string materialNumber)
         {
+            // 金蝶 ExecuteBillQuery 接口地址
             string url = string.Concat(CloudUrl, "Kingdee.BOS.WebApi.ServicesStub.DynamicFormService.ExecuteBillQuery.common.kdsvc");
 
+            // SQL 注入转义：单引号替换为两个单引号
             string safeMoNo = (moBillNo ?? "").Replace("'", "''");
             string safeMat = (materialNumber ?? "").Replace("'", "''");
 
+            // 组装查询参数
             JObject queryParam = new JObject();
             queryParam.Add("FormId", "PRD_MO");
             queryParam.Add("FieldKeys", "FID,FTreeEntity_FEntryID,FTreeEntity_FSeq");
@@ -332,12 +392,14 @@ namespace kingdee.CustLI.Business.PlugInWebApi
             queryParam.Add("StartRow", 0);
             queryParam.Add("Limit", 0);
 
+            // 金蝶 ExecuteBillQuery 的请求参数格式：[JSON字符串]
             List<object> parameters = new List<object>();
             parameters.Add(JsonConvert.SerializeObject(queryParam));
             string rawResult = HttpPost(url, JsonConvert.SerializeObject(parameters));
 
             try
             {
+                // 返回格式：[[fid, fentryId, fseq], ...]
                 JArray rows = JArray.Parse(rawResult);
                 if (rows == null || rows.Count == 0) return (0, 0);
 
@@ -357,26 +419,43 @@ namespace kingdee.CustLI.Business.PlugInWebApi
             }
         }
 
+        /// <summary>
+        /// 调用金蝶 DynamicFormService.BatchSave 接口执行批量保存
+        /// </summary>
+        /// <param name="formId">单据标识（如 PRD_INSTOCK）</param>
+        /// <param name="content">BatchSave 请求体 JSON 字符串</param>
+        /// <returns>金蝶原生返回的 JSON 字符串</returns>
         private string BatchSaveCall(string formId, string content)
         {
             string url = string.Concat(CloudUrl, "Kingdee.BOS.WebApi.ServicesStub.DynamicFormService.BatchSave.common.kdsvc");
+            // 金蝶 BatchSave 参数格式：[formId, contentJson]
             List<object> Parameters = new List<object>();
             Parameters.Add(formId);
             Parameters.Add(content);
             return HttpPost(url, JsonConvert.SerializeObject(Parameters));
         }
 
+        /// <summary>
+        /// 发起 HTTP POST 请求，附带 CookieContainer 保持登录会话
+        /// 请求体按金蝶 WebAPI 格式包装：{format, useragent, rid, parameters, timestamp, v}
+        /// </summary>
+        /// <param name="url">请求地址</param>
+        /// <param name="parametersJson">请求参数 JSON 字符串</param>
+        /// <returns>响应内容</returns>
         private string HttpPost(string url, string parametersJson)
         {
             HttpWebRequest httpRequest = (HttpWebRequest)WebRequest.Create(url);
             httpRequest.Method = "POST";
             httpRequest.ContentType = "application/json";
-            httpRequest.Timeout = 1000 * 60 * 10;
+            httpRequest.Timeout = 1000 * 60 * 10; // 10 分钟超时
+
+            // 附加上一步登录获取的 Cookie
             if (_cookieContainer != null)
             {
                 httpRequest.CookieContainer = _cookieContainer;
             }
 
+            // 金蝶 WebAPI 要求的请求包装格式
             JObject jObj = new JObject();
             jObj.Add("format", 1);
             jObj.Add("useragent", "ApiClient");
@@ -386,6 +465,7 @@ namespace kingdee.CustLI.Business.PlugInWebApi
             jObj.Add("v", "1.0");
             string sContent = jObj.ToString();
 
+            // 写入请求体
             byte[] bytes = Encoding.UTF8.GetBytes(sContent);
             using (Stream reqStream = httpRequest.GetRequestStream())
             {
@@ -393,6 +473,7 @@ namespace kingdee.CustLI.Business.PlugInWebApi
                 reqStream.Flush();
             }
 
+            // 读取响应
             using (var repStream = httpRequest.GetResponse().GetResponseStream())
             {
                 using (var reader = new StreamReader(repStream))
@@ -402,8 +483,20 @@ namespace kingdee.CustLI.Business.PlugInWebApi
             }
         }
 
+        /// <summary>
+        /// 根据 FormId 和数据列表构建 BatchSave 的完整 JSON 请求体
+        /// 包含公共参数（NeedUpDateFields / IsDeleteEntry 等）和 Model 数组
+        /// </summary>
+        /// <param name="formId">单据标识</param>
+        /// <param name="dataList">外部传入的数据列表</param>
+        /// <returns>
+        ///   JSON 字符串 — 构建成功；
+        ///   null — FormId 不支持；
+        ///   纯文本 — 校验错误信息（如生产订单不存在）
+        /// </returns>
         private string BuildBatchSaveJson(string formId, JArray dataList)
         {
+            // BatchSave 公共参数（所有单据类型共用）
             JObject batchObj = new JObject();
             batchObj.Add("NeedUpDateFields", new JArray());
             batchObj.Add("NeedReturnFields", new JArray());
@@ -419,11 +512,13 @@ namespace kingdee.CustLI.Business.PlugInWebApi
             batchObj.Add("IsControlPrecision", "false");
             batchObj.Add("ValidateRepeatJson", "false");
 
+            // Model 数组：每行数据对应一个 Model
             JArray modelArr = new JArray();
 
             switch (formId)
             {
                 case "PRD_INSTOCK":
+                    // 生产入库单：需要先根据生产订单号查询 MoId，再构建 Model
                     foreach (var item in dataList)
                     {
                         JObject jo = item as JObject;
@@ -437,32 +532,44 @@ namespace kingdee.CustLI.Business.PlugInWebApi
                         modelArr.Add(BuildPrdInstockModel(jo));
                     }
                     break;
+
                 case "STK_TransferDirect_In":
                 case "STK_TransferDirect_Out":
+                    // 直接调拨单（入库方向 STK_TransferDirect_In / 出库方向 STK_TransferDirect_Out）
+                    // 不需要查上游单据，直接根据传入字段构建 Model
                     foreach (var item in dataList)
                     {
                         modelArr.Add(BuildTransferDirectModel(item as JObject));
                     }
                     break;
+
                 default:
+                    // 不支持的 FormId
                     return null;
             }
 
             batchObj.Add("Model", modelArr);
-            batchObj.Add("BatchCount", 5);
+            batchObj.Add("BatchCount", 5); // 每批 5 条
             return JsonConvert.SerializeObject(batchObj);
         }
 
+        /// <summary>
+        /// 构建生产入库单（PRD_INSTOCK）的 Model
+        /// 关联上游生产订单，查询物料对应的默认车间
+        /// </summary>
         private JObject BuildPrdInstockModel(JObject item)
         {
+            // 从 DataList 行中提取字段
             string moBillNo = item["FSrcBillNo"]?.ToString() ?? "";
             string materialNumber = item["FMaterialNumber"]?.ToString() ?? "";
             decimal qty = ParseQty(item["FQty"]);
             string stockNumber = item["FStockNumber"]?.ToString() ?? "";
             string lot = item["FLot"]?.ToString() ?? "";
 
+            // 查询上游生产订单的 FID 和分录 FEntryId
             var (moFid, moEntryId) = GetMoIds(moBillNo, materialNumber);
 
+            // 查询物料对应的默认车间（FWorkShopId1）
             string workShopNumber = "";
             string sql = $@"SELECT d.FNUMBER AS FWORKSHOPNUMBER
                     FROM T_BD_MATERIAL a1
@@ -475,6 +582,7 @@ namespace kingdee.CustLI.Business.PlugInWebApi
                 workShopNumber = conStr[0]["FWORKSHOPNUMBER"].ToString();
             }
 
+            // 构建单据头
             JObject model = new JObject();
             AddField(model, "FBillType", Creat_JsonChildObject("FNUMBER", "SCRKD02_SYS"));
             AddField(model, "FDate", DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss"));
@@ -486,39 +594,54 @@ namespace kingdee.CustLI.Business.PlugInWebApi
             model.Add("FIsEntrust", JToken.FromObject(false));
             model.Add("FEntrustInStockId", JToken.FromObject(0));
 
+            // 构建分录（FEntity）
             JArray entryArr = new JArray();
             JObject entry = new JObject();
+
+            // 上游生产订单关联字段
             AddField(entry, "FSrcEntryId", moEntryId);
             AddField(entry, "FMaterialId", Creat_JsonChildObject("FNumber", materialNumber));
+            // 单位信息
             AddField(entry, "FUnitID", Creat_JsonChildObject("FNumber", "Pcs"));
+            // 数量
             AddField(entry, "FMustQty", qty);
             AddField(entry, "FRealQty", qty);
             AddField(entry, "FCostRate", 100.0);
+            // 基本单位数量
             AddField(entry, "FBaseUnitId", Creat_JsonChildObject("FNumber", "Pcs"));
             AddField(entry, "FBaseMustQty", qty);
             AddField(entry, "FBaseRealQty", qty);
+            // 货主
             AddField(entry, "FOwnerTypeId", "BD_OwnerOrg");
             AddField(entry, "FOwnerId", Creat_JsonChildObject("FNumber", "100"));
+            // 仓库
             AddField(entry, "FStockId", Creat_JsonChildObject("FNumber", stockNumber));
+            // 车间（如果查询到有值才设置）
             if (!string.IsNullOrEmpty(workShopNumber))
             {
                 AddField(entry, "FWorkShopId1", Creat_JsonChildObject("FNumber", workShopNumber));
             }
+            // 上游生产订单信息
             AddField(entry, "FMoBillNo", moBillNo);
             AddField(entry, "FMoId", moFid);
             AddField(entry, "FMoEntryId", moEntryId);
             AddField(entry, "FMoEntrySeq", 1);
+            // 库存单位数量
             AddField(entry, "FStockUnitId", Creat_JsonChildObject("FNumber", "Pcs"));
             AddField(entry, "FStockRealQty", qty);
+            // 源单类型
             AddField(entry, "FSrcBillType", "PRD_MO");
             AddField(entry, "FSrcInterId", moFid);
             AddField(entry, "FSrcBillNo", moBillNo);
             AddField(entry, "FBasePrdRealQty", qty);
+            // 库存状态
             AddField(entry, "FStockStatusId", Creat_JsonChildObject("FNumber", "KCZT01_SYS"));
             AddField(entry, "FSrcEntrySeq", 1);
             AddField(entry, "FMOMAINENTRYID", moEntryId);
+            // 保管者
             AddField(entry, "FKeeperTypeId", "BD_KeeperOrg");
             AddField(entry, "FKeeperId", Creat_JsonChildObject("FNumber", "100"));
+            // 批号
             AddField(entry, "FLot", Creat_JsonChildObject("FNumber", lot));
             entry.Add("FIsNew", JToken.FromObject(false));
             entry.Add("FCheckProduct", JToken.FromObject(false));
@@ -531,6 +654,7 @@ namespace kingdee.CustLI.Business.PlugInWebApi
             entry.Add("FBaseSelReStkQty", JToken.FromObject(0.0));
             entry.Add("FIsOverLegalOrg", JToken.FromObject(false));
 
+            // 分录关联信息（FEntity_Link）— 与上游生产订单建立上下游关联
             JArray linkArr = new JArray();
             JObject link = new JObject();
             link.Add("FEntity_Link_FRuleId", "PRD_MO2INSTOCK");
@@ -545,6 +669,10 @@ namespace kingdee.CustLI.Business.PlugInWebApi
             return model;
         }
 
+        /// <summary>
+        /// 为 JObject 添加字段（对象类型重载）
+        /// 自动跳过 null / 空字符串 / 零值 / false 值，避免污染请求体
+        /// </summary>
         private void AddField(JObject obj, string key, object value)
         {
             if (value == null) return;
@@ -557,6 +685,10 @@ namespace kingdee.CustLI.Business.PlugInWebApi
             obj.Add(key, JToken.FromObject(value));
         }
 
+        /// <summary>
+        /// 为 JObject 添加字段（JToken 类型重载）
+        /// 自动跳过 null / 空字符串 JToken
+        /// </summary>
         private void AddField(JObject obj, string key, JToken value)
         {
             if (value == null) return;
@@ -564,36 +696,58 @@ namespace kingdee.CustLI.Business.PlugInWebApi
             obj.Add(key, value);
         }
 
+        /// <summary>
+        /// 构建直接调拨单的 BatchSave JSON Model
+        /// 支持 STK_TransferDirect_In（入库方向）和 STK_TransferDirect_Out（出库方向）
+        /// 
+        /// 字段映射：
+        ///   FMaterialNumber  → FMaterialId.FNumber（物料）
+        ///   FSrcStockNumber  → FSrcStockId.FNumber（调出仓库）
+        ///   FDestStockNumber → FDestStockId.FNumber（调入仓库）
+        ///   FQty             → FQty（数量）
+        ///   FLot             → FLot.FNumber（批号，可选）
+        /// </summary>
         private JObject BuildTransferDirectModel(JObject item)
         {
+            // 从 DataList 行中提取字段
             string materialNumber = item["FMaterialNumber"] != null ? item["FMaterialNumber"].ToString() : "";
             string srcStockNumber = item["FSrcStockNumber"] != null ? item["FSrcStockNumber"].ToString() : "";
             string destStockNumber = item["FDestStockNumber"] != null ? item["FDestStockNumber"].ToString() : "";
             string lot = item["FLot"] != null ? item["FLot"].ToString() : "";
             decimal qty = ParseQty(item["FQty"]);
+            // 日期取当天零点
             string nowStr = DateTime.Now.ToString("yyyy-MM-dd 00:00:00");
 
+            // 构建分录（FBillEntry）
             JObject entry = new JObject();
             entry.Add("FRowType", "Standard");
             entry.Add("FMaterialId", Creat_JsonChildObject("FNumber", materialNumber));
             entry.Add("FUnitID", Creat_JsonChildObject("FNumber", "Pcs"));
             entry.Add("FQty", qty);
+            // 调出/调入仓库
             entry.Add("FSrcStockId", Creat_JsonChildObject("FNumber", srcStockNumber));
             entry.Add("FDestStockId", Creat_JsonChildObject("FNumber", destStockNumber));
+            // 库存状态（默认：可用）
             entry.Add("FSrcStockStatusId", Creat_JsonChildObject("FNumber", "KCZT01_SYS"));
             entry.Add("FDestStockStatusId", Creat_JsonChildObject("FNumber", "KCZT01_SYS"));
+            // 业务日期
             entry.Add("FBusinessDate", nowStr);
+            // 源单类型（空=非关联生成）
             entry.Add("FSrcBillTypeId", "");
+            // 货主（调出/调入）
             entry.Add("FOwnerTypeOutId", "BD_OwnerOrg");
             entry.Add("FOwnerOutId", Creat_JsonChildObject("FNumber", "100"));
             entry.Add("FOwnerTypeId", "BD_OwnerOrg");
             entry.Add("FOwnerId", Creat_JsonChildObject("FNumber", "100"));
+            // 源单号（空）
             entry.Add("FSrcBillNo", "");
             entry.Add("FSecQty", 0.0);
             entry.Add("FExtAuxUnitQty", 0.0);
+            // 基本单位数量
             entry.Add("FBaseUnitId", Creat_JsonChildObject("FNumber", "Pcs"));
             entry.Add("FBaseQty", qty);
             entry.Add("FISFREE", false);
+            // 保管者（调出/调入）
             entry.Add("FKeeperTypeId", "BD_KeeperOrg");
             entry.Add("FActQty", 0.0);
             entry.Add("FKeeperId", Creat_JsonChildObject("FNumber", "100"));
@@ -601,21 +755,27 @@ namespace kingdee.CustLI.Business.PlugInWebApi
             entry.Add("FKeeperOutId", Creat_JsonChildObject("FNumber", "100"));
             entry.Add("FDiscountRate", 0.0);
             entry.Add("FRepairQty", 0.0);
+            // 目标物料（同源物料）
             entry.Add("FDestMaterialId", Creat_JsonChildObject("FNUMBER", materialNumber));
+            // 销售单位数量
             entry.Add("FSaleUnitId", Creat_JsonChildObject("FNumber", "Pcs"));
             entry.Add("FSaleQty", qty);
             entry.Add("FSalBaseQty", qty);
+            // 价格单位数量
             entry.Add("FPriceUnitID", Creat_JsonChildObject("FNumber", "Pcs"));
             entry.Add("FPriceQty", qty);
             entry.Add("FPriceBaseQty", qty);
             entry.Add("FOutJoinQty", 0.0);
             entry.Add("FBASEOUTJOINQTY", 0.0);
+            // 关联单据 ID（默认 0）
             entry.Add("FSOEntryId", 0);
             entry.Add("FTransReserveLink", false);
             entry.Add("FQmEntryId", 0);
             entry.Add("FConvertEntryId", 0);
             entry.Add("FCheckDelivery", false);
             entry.Add("FBomEntryId", 0);
+
+            // 批号（可选）
             if (!string.IsNullOrEmpty(lot))
             {
                 entry.Add("FLot", Creat_JsonChildObject("FNumber", lot));
@@ -624,18 +784,22 @@ namespace kingdee.CustLI.Business.PlugInWebApi
             JArray entryArr = new JArray();
             entryArr.Add(entry);
 
+            // 构建单据头
             JObject model = new JObject();
             model.Add("FID", 0);
+            // 单据类型：ZJDB01_SYS = 直接调拨单
             model.Add("FBillTypeID", Creat_JsonChildObject("FNUMBER", "ZJDB01_SYS"));
             model.Add("FBizType", "NORMAL");
             model.Add("FTransferDirect", "GENERAL");
             model.Add("FTransferBizType", "InnerOrgTransfer");
+            // 组织信息（默认库存组织 100）
             model.Add("FSettleOrgId", Creat_JsonChildObject("FNumber", "100"));
             model.Add("FSaleOrgId", Creat_JsonChildObject("FNumber", "100"));
             model.Add("FStockOutOrgId", Creat_JsonChildObject("FNumber", "100"));
             model.Add("FOwnerTypeOutIdHead", "BD_OwnerOrg");
             model.Add("FOwnerOutIdHead", Creat_JsonChildObject("FNumber", "100"));
             model.Add("FStockOrgId", Creat_JsonChildObject("FNumber", "100"));
+            // 税务/价格信息
             model.Add("FIsIncludedTax", true);
             model.Add("FIsPriceExcludeTax", true);
             model.Add("FExchangeTypeId", Creat_JsonChildObject("FNUMBER", "HLTX01_SYS"));
@@ -646,16 +810,23 @@ namespace kingdee.CustLI.Business.PlugInWebApi
             model.Add("FDate", nowStr);
             model.Add("FBaseCurrId", Creat_JsonChildObject("FNumber", "PRE001"));
             model.Add("FWriteOffConsign", false);
+            // 分录
             model.Add("FBillEntry", entryArr);
 
             return model;
         }
 
+        /// <summary>
+        /// 获取默认库存组织编码（当前默认值：100）
+        /// </summary>
         private string GetDefaultOrg()
         {
             return "100";
         }
 
+        /// <summary>
+        /// 根据 FormId 获取默认单据类型编码
+        /// </summary>
         private string GetDefaultBillType(string formId)
         {
             switch (formId)
@@ -669,12 +840,28 @@ namespace kingdee.CustLI.Business.PlugInWebApi
             }
         }
 
+        /// <summary>
+        /// 将金蝶 BatchSave 返回的原生 JSON 映射为统一格式
+        /// 返回格式：
+        /// {
+        ///   Success: true/false,
+        ///   Message: "操作完成，成功N条，失败M条",
+        ///   Data: {
+        ///     SuccessCount: N,
+        ///     FailCount: M,
+        ///     Details: [{ Index, Success, BillNo, Id, Message }]
+        ///   }
+        /// }
+        /// </summary>
+        /// <param name="rawResult">金蝶原生返回的 JSON 字符串</param>
+        /// <param name="totalCount">请求的总行数</param>
         private JObject MapBatchSaveResult(string rawResult, int totalCount)
         {
             JObject result = BuildResult(false, "操作未完成", 0, 0, new JArray());
 
             try
             {
+                // 解析金蝶返回结果（处理多层数组嵌套）
                 JObject rawJson = ResolveKdResponse(rawResult);
                 if (rawJson == null)
                 {
@@ -689,6 +876,7 @@ namespace kingdee.CustLI.Business.PlugInWebApi
                     return result;
                 }
 
+                // 提取 ResponseStatus（兼容两种 JSON 层级结构）
                 JObject responseStatus = rawJson["Result"] != null && rawJson["Result"]["ResponseStatus"] != null
                     ? rawJson["Result"]["ResponseStatus"] as JObject
                     : rawJson["ResponseStatus"] as JObject;
@@ -697,17 +885,21 @@ namespace kingdee.CustLI.Business.PlugInWebApi
                 int successCount = 0;
                 int failCount = 0;
 
+                // 整体是否成功
                 bool isSuccess = responseStatus != null && responseStatus["IsSuccess"] != null
                     && responseStatus["IsSuccess"].Value<bool>();
 
+                // 成功实体列表
                 JArray successEntities = responseStatus != null && responseStatus["SuccessEntitys"] != null
                     ? responseStatus["SuccessEntitys"] as JArray
                     : new JArray();
 
+                // 错误列表
                 JArray errors = responseStatus != null && responseStatus["Errors"] != null
                     ? responseStatus["Errors"] as JArray
                     : new JArray();
 
+                // 按最大索引遍历，确保每一行都有结果
                 int maxItems = Math.Max(
                     successEntities != null ? successEntities.Count : 0,
                     errors != null ? errors.Count : 0
@@ -723,6 +915,7 @@ namespace kingdee.CustLI.Business.PlugInWebApi
                     detail.Add("Id", "");
                     detail.Add("Message", "");
 
+                    // 先查找成功实体
                     bool foundSuccess = false;
                     if (successEntities != null)
                     {
@@ -739,6 +932,7 @@ namespace kingdee.CustLI.Business.PlugInWebApi
                         }
                     }
 
+                    // 未成功则取错误信息
                     if (!foundSuccess && errors != null)
                     {
                         foreach (var err in errors)
@@ -753,6 +947,7 @@ namespace kingdee.CustLI.Business.PlugInWebApi
 
                     details.Add(detail);
 
+                    // 统计成功/失败数
                     if (detail["Success"] != null && detail["Success"].Value<bool>())
                     {
                         successCount++;
@@ -763,6 +958,7 @@ namespace kingdee.CustLI.Business.PlugInWebApi
                     }
                 }
 
+                // 组装最终结果
                 result["Message"] = "操作完成，成功" + successCount + "条，失败" + failCount + "条";
                 result["Data"]["SuccessCount"] = successCount;
                 result["Data"]["FailCount"] = failCount;
@@ -771,6 +967,7 @@ namespace kingdee.CustLI.Business.PlugInWebApi
             }
             catch (Exception mapEx)
             {
+                // 映射异常时返回全部失败
                 result["Message"] = "操作完成，成功0条，失败" + totalCount + "条";
                 JObject errDetail2 = new JObject();
                 errDetail2["Index"] = 0;
@@ -784,12 +981,19 @@ namespace kingdee.CustLI.Business.PlugInWebApi
             return result;
         }
 
+        /// <summary>
+        /// 解析金蝶 HTTP 返回的原始 JSON
+        /// 金蝶返回有时是 [[{...}]] 多层数组嵌套，统一提取为 JObject
+        /// </summary>
+        /// <param name="rawResult">原始返回字符串</param>
+        /// <returns>解析后的 JObject，解析失败返回 null</returns>
         private JObject ResolveKdResponse(string rawResult)
         {
             if (string.IsNullOrEmpty(rawResult)) return null;
 
             try
             {
+                // 如果是数组格式，逐层解包直到 JObject
                 if (rawResult.TrimStart().StartsWith("["))
                 {
                     JArray arr = JArray.Parse(rawResult);
@@ -809,6 +1013,9 @@ namespace kingdee.CustLI.Business.PlugInWebApi
             }
         }
 
+        /// <summary>
+        /// 构建统一返回格式
+        /// </summary>
         private JObject BuildResult(bool success, string message, int successCount, int failCount, JArray details)
         {
             JObject result = new JObject();
@@ -821,6 +1028,12 @@ namespace kingdee.CustLI.Business.PlugInWebApi
             return result;
         }
 
+        /// <summary>
+        /// 创建金蝶 JSON 子对象：{ "FNumber": "xxx" } 或 { "FNUMBER": "xxx" }
+        /// 用于设置基础资料字段引用
+        /// </summary>
+        /// <param name="fckey">键名：FNumber 或 FNUMBER</param>
+        /// <param name="fcval">编码值</param>
         private JObject Creat_JsonChildObject(string fckey, string fcval)
         {
             JObject cjitem = new JObject();
