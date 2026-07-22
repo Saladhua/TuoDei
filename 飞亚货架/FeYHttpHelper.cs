@@ -10,7 +10,7 @@ namespace kingdee.CustLI.Business.PlugIn
 {
     internal static class FeYHttpHelper
     {
-        private const string ConfigFilePath = @"C:\Program Files (x86)\Kingdee\K3Cloud\CustAppConfig\App.config";
+        private const string ConfigFilePath = @"D:\kingdee\CustAppConfig\App.config";
         private const string ConfigKey_Url = "FeY_MaterialPushUrl";
 
         internal static string GetPushUrl()
