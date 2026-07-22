@@ -40,11 +40,10 @@ namespace kingdee.CustLI.Business.PlugIn
             for (int i = 0; i < rowCount; i++)
             {
                 var priceListTaxPriceObj = this.View.Model.GetValue("F_CustLi_PriceListTaxPrice", i);
-                // 此行无价目表价格，跳过
-                if (priceListTaxPriceObj == null || priceListTaxPriceObj == DBNull.Value)
+                // 此行无价目表价格或格式不正确，跳过
+                if (priceListTaxPriceObj == null || priceListTaxPriceObj == DBNull.Value ||
+                    !decimal.TryParse(priceListTaxPriceObj.ToString(), out decimal priceListTaxPrice))
                     continue;
-
-                decimal priceListTaxPrice = Convert.ToDecimal(priceListTaxPriceObj);
 
                 // 含税 → 写入含税单价(FTAXPRICE)；不含税 → 写入单价(FPRICE)
                 if (includedTax)
