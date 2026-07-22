@@ -869,7 +869,10 @@ namespace kingdee.CustLI.Business.PlugInWebApi
                     errDetail["Success"] = false;
                     errDetail["BillNo"] = "";
                     errDetail["Id"] = "";
-                    errDetail["Message"] = "金蝶返回结果解析失败";
+                    string snippet = rawResult != null && rawResult.Length > 800
+                        ? rawResult.Substring(0, 800) + "......"
+                        : rawResult;
+                    errDetail["Message"] = "金蝶返回结果解析失败，原始返回：" + snippet;
                     ((JArray)result["Data"]["Details"]).Add(errDetail);
                     return result;
                 }
@@ -972,7 +975,10 @@ namespace kingdee.CustLI.Business.PlugInWebApi
                 errDetail2["Success"] = false;
                 errDetail2["BillNo"] = "";
                 errDetail2["Id"] = "";
-                errDetail2["Message"] = "结果映射异常：" + mapEx.Message;
+                string snippet = rawResult != null && rawResult.Length > 800
+                    ? rawResult.Substring(0, 800) + "......"
+                    : rawResult;
+                errDetail2["Message"] = "结果映射异常：" + mapEx.Message + " | 原始返回：" + snippet;
                 result["Data"]["Details"] = new JArray(errDetail2);
             }
 

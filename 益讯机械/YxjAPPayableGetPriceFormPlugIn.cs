@@ -4,6 +4,7 @@ using Kingdee.BOS.Core.Bill;
 using Kingdee.BOS.Core.DynamicForm.PlugIn;
 using Kingdee.BOS.Core.DynamicForm.PlugIn.Args;
 using Kingdee.BOS.Util;
+using Kingdee.K3.FIN.Core;
 
 namespace kingdee.CustLI.Business.PlugIn
 {
@@ -28,7 +29,7 @@ namespace kingdee.CustLI.Business.PlugIn
 
             // 读取单据头"含税"标志
             bool includedTax = false;
-            var istaxObj = this.View.Model.GetValue("ISTAX");
+            var istaxObj = this.View.Model.DataObject["ISTAX"];
             if (istaxObj != null)
             {
                 includedTax = Convert.ToBoolean(istaxObj);
