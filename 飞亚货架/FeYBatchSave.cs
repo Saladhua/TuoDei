@@ -534,8 +534,19 @@ namespace kingdee.CustLI.Business.PlugInWebApi
                     break;
 
                 case "STK_TransferDirect_In":
+                {
+                    JObject model = BuildTransferDirectHeader();
+                    JArray entryArr = new JArray();
+                    foreach (var item in dataList)
+                    {
+                        entryArr.Add(BuildTransferDirectEntry(item as JObject));
+                    }
+                    model.Add("FBillEntry", entryArr);
+                    modelArr.Add(model);
+                }
+                break;
+
                 case "STK_TransferDirect_Out":
-                case "STK_TransferDirect":
                 {
                     JObject model = BuildTransferDirectHeader();
                     JArray entryArr = new JArray();
