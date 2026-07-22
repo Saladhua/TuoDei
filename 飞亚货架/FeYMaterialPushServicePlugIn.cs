@@ -58,14 +58,14 @@ namespace kingdee.CustLI.Business.PlugIn
                     categoryName = catObj["Name"].ToString();
                 }
 
-                //var (success, message) = FeYHttpHelper.PushMaterial(
-                //    number, name, spec, unitNumber, categoryName);
+                var (success, message) = FeYHttpHelper.PushMaterial(
+                    number, name, spec, unitNumber, categoryName);
 
-                //string newState = success ? "2" : "3";
-                //string safeMessage = (message ?? "").Replace("'", "''");
+                string newState = success ? "2" : "3";
+                string safeMessage = (message ?? "").Replace("'", "''");
 
-                //bill["F_CustLi_PushState"] = newState;
-                //bill["F_CustLIRemark"] = safeMessage;
+                bill["F_CustLi_PushState"] = newState;
+                bill["F_CustLIRemark"] = safeMessage;
             }
         }
     }

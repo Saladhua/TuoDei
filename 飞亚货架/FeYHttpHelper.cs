@@ -75,8 +75,8 @@ namespace kingdee.CustLI.Business.PlugIn
                     try
                     {
                         JObject respObj = JObject.Parse(result);
-                        int code = respObj["Code"]?.Value<int>() ?? 0;
-                        string msg = respObj["Message"]?.ToString() ?? "";
+                        int code = respObj["code"]?.Value<int>() ?? 0;
+                        string msg = respObj["message"]?.ToString() ?? "";
                         return (code == 200, msg);
                     }
                     catch
