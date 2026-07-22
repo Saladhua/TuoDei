@@ -998,16 +998,8 @@ namespace kingdee.CustLI.Business.PlugInWebApi
                 result["Message"] = "操作完成，成功" + successCount + "条，失败" + failCount + "条";
                 result["Data"]["SuccessCount"] = successCount;
                 result["Data"]["FailCount"] = failCount;
-                result["Data"]["Details"] = failCount == 0 ? new JArray() : details;
+                result["Data"]["Details"] = details;
                 result["Success"] = isSuccess && failCount == 0;
-
-                // 全部成功时提取单号和ID
-                if (failCount == 0 && successEntities != null && successEntities.Count > 0)
-                {
-                    var first = successEntities[0];
-                    result["Data"]["BillNo"] = first["Number"] != null ? first["Number"].ToString() : "";
-                    result["Data"]["Id"] = first["Id"] != null ? first["Id"].ToString() : "";
-                }
             }
             catch (Exception mapEx)
             {
