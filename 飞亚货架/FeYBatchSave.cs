@@ -166,6 +166,7 @@ using NPOI.OpenXmlFormats.Spreadsheet;
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Net;
 using System.Text;
 using System.Web;
@@ -254,6 +255,36 @@ namespace kingdee.CustLI.Business.PlugInWebApi
                 if (!string.IsNullOrEmpty(qtyCheckMsg))
                 {
                     return BuildResult(false, qtyCheckMsg, 0, 0, new JArray());
+                }
+
+                // 直接调拨单：前置校验物料是否在账套中存在
+                if (formId == "STK_TransferDirect_In" || formId == "STK_TransferDirect_Out")
+                {
+                    List<string> materialNumbers = new List<string>();
+                    foreach (var item in dataList)
+                    {
+                        string mat = item["FMaterialNumber"]?.ToString() ?? "";
+                        if (!string.IsNullOrEmpty(mat))
+                            materialNumbers.Add(mat);
+                    }
+
+                    if (materialNumbers.Count > 0)
+                    {
+                        string safeNumbers = string.Join("','", materialNumbers.Select(m => m.Replace("'", "''")));
+                        string sql = $"SELECT FNUMBER FROM T_BD_MATERIAL WHERE FNUMBER IN ('{safeNumbers}')";
+                        var existList = DBUtils.ExecuteDynamicObject(this.KDContext.Session.AppContext, sql);
+
+                        var existSet = new HashSet<string>(
+                            existList.Select(r => r["FNUMBER"]?.ToString() ?? ""),
+                            StringComparer.OrdinalIgnoreCase
+                        );
+
+                        var notExist = materialNumbers.Where(m => !existSet.Contains(m)).ToList();
+                        if (notExist.Count > 0)
+                        {
+                            return BuildResult(false, "以下物料编码不存在: " + string.Join(", ", notExist), 0, 0, new JArray());
+                        }
+                    }
                 }
 
                 // 根据 FormId 构建 BatchSave 所需的 JSON Model 数组
@@ -969,7 +1000,7 @@ namespace kingdee.CustLI.Business.PlugInWebApi
                 result["Message"] = "操作完成，成功" + successCount + "条，失败" + failCount + "条";
                 result["Data"]["SuccessCount"] = successCount;
                 result["Data"]["FailCount"] = failCount;
-                result["Data"]["Details"] = details;
+                result["Data"]["Details"] = failCount == 0 ? new JArray() : details;
                 result["Success"] = isSuccess && failCount == 0;
             }
             catch (Exception mapEx)
