@@ -534,12 +534,24 @@ namespace kingdee.CustLI.Business.PlugInWebApi
                     break;
 
                 case "STK_TransferDirect_In":
-                case "STK_TransferDirect_Out":
-                    // 直接调拨单（入库方向 STK_TransferDirect_In / 出库方向 STK_TransferDirect_Out）
-                    // 不需要查上游单据，直接根据传入字段构建 Model
                     foreach (var item in dataList)
                     {
-                        modelArr.Add(BuildTransferDirectModel(item as JObject));
+                        JObject model = BuildTransferDirectHeader();
+                        JArray entryArr = new JArray();
+                        entryArr.Add(BuildTransferDirectEntry(item as JObject));
+                        model.Add("FBillEntry", entryArr);
+                        modelArr.Add(model);
+                    }
+                    break;
+
+                case "STK_TransferDirect_Out":
+                    foreach (var item in dataList)
+                    {
+                        JObject model = BuildTransferDirectHeader();
+                        JArray entryArr = new JArray();
+                        entryArr.Add(BuildTransferDirectEntry(item as JObject));
+                        model.Add("FBillEntry", entryArr);
+                        modelArr.Add(model);
                     }
                     break;
 
@@ -697,109 +709,25 @@ namespace kingdee.CustLI.Business.PlugInWebApi
         }
 
         /// <summary>
-        /// 构建直接调拨单的 BatchSave JSON Model
-        /// 支持 STK_TransferDirect_In（入库方向）和 STK_TransferDirect_Out（出库方向）
-        /// 
-        /// 字段映射：
-        ///   FMaterialNumber  → FMaterialId.FNumber（物料）
-        ///   FSrcStockNumber  → FSrcStockId.FNumber（调出仓库）
-        ///   FDestStockNumber → FDestStockId.FNumber（调入仓库）
-        ///   FQty             → FQty（数量）
-        ///   FLot             → FLot.FNumber（批号，可选）
+        /// 构建直接调拨单的单据头
+        /// 字段映射见头注释
         /// </summary>
-        private JObject BuildTransferDirectModel(JObject item)
+        private JObject BuildTransferDirectHeader()
         {
-            // 从 DataList 行中提取字段
-            string materialNumber = item["FMaterialNumber"] != null ? item["FMaterialNumber"].ToString() : "";
-            string srcStockNumber = item["FSrcStockNumber"] != null ? item["FSrcStockNumber"].ToString() : "";
-            string destStockNumber = item["FDestStockNumber"] != null ? item["FDestStockNumber"].ToString() : "";
-            string lot = item["FLot"] != null ? item["FLot"].ToString() : "";
-            decimal qty = ParseQty(item["FQty"]);
-            // 日期取当天零点
             string nowStr = DateTime.Now.ToString("yyyy-MM-dd 00:00:00");
 
-            // 构建分录（FBillEntry）
-            JObject entry = new JObject();
-            entry.Add("FRowType", "Standard");
-            entry.Add("FMaterialId", Creat_JsonChildObject("FNumber", materialNumber));
-            entry.Add("FUnitID", Creat_JsonChildObject("FNumber", "Pcs"));
-            entry.Add("FQty", qty);
-            // 调出/调入仓库
-            entry.Add("FSrcStockId", Creat_JsonChildObject("FNumber", srcStockNumber));
-            entry.Add("FDestStockId", Creat_JsonChildObject("FNumber", destStockNumber));
-            // 库存状态（默认：可用）
-            entry.Add("FSrcStockStatusId", Creat_JsonChildObject("FNumber", "KCZT01_SYS"));
-            entry.Add("FDestStockStatusId", Creat_JsonChildObject("FNumber", "KCZT01_SYS"));
-            // 业务日期
-            entry.Add("FBusinessDate", nowStr);
-            // 源单类型（空=非关联生成）
-            entry.Add("FSrcBillTypeId", "");
-            // 货主（调出/调入）
-            entry.Add("FOwnerTypeOutId", "BD_OwnerOrg");
-            entry.Add("FOwnerOutId", Creat_JsonChildObject("FNumber", "100"));
-            entry.Add("FOwnerTypeId", "BD_OwnerOrg");
-            entry.Add("FOwnerId", Creat_JsonChildObject("FNumber", "100"));
-            // 源单号（空）
-            entry.Add("FSrcBillNo", "");
-            entry.Add("FSecQty", 0.0);
-            entry.Add("FExtAuxUnitQty", 0.0);
-            // 基本单位数量
-            entry.Add("FBaseUnitId", Creat_JsonChildObject("FNumber", "Pcs"));
-            entry.Add("FBaseQty", qty);
-            entry.Add("FISFREE", false);
-            // 保管者（调出/调入）
-            entry.Add("FKeeperTypeId", "BD_KeeperOrg");
-            entry.Add("FActQty", 0.0);
-            entry.Add("FKeeperId", Creat_JsonChildObject("FNumber", "100"));
-            entry.Add("FKeeperTypeOutId", "BD_KeeperOrg");
-            entry.Add("FKeeperOutId", Creat_JsonChildObject("FNumber", "100"));
-            entry.Add("FDiscountRate", 0.0);
-            entry.Add("FRepairQty", 0.0);
-            // 目标物料（同源物料）
-            entry.Add("FDestMaterialId", Creat_JsonChildObject("FNUMBER", materialNumber));
-            // 销售单位数量
-            entry.Add("FSaleUnitId", Creat_JsonChildObject("FNumber", "Pcs"));
-            entry.Add("FSaleQty", qty);
-            entry.Add("FSalBaseQty", qty);
-            // 价格单位数量
-            entry.Add("FPriceUnitID", Creat_JsonChildObject("FNumber", "Pcs"));
-            entry.Add("FPriceQty", qty);
-            entry.Add("FPriceBaseQty", qty);
-            entry.Add("FOutJoinQty", 0.0);
-            entry.Add("FBASEOUTJOINQTY", 0.0);
-            // 关联单据 ID（默认 0）
-            entry.Add("FSOEntryId", 0);
-            entry.Add("FTransReserveLink", false);
-            entry.Add("FQmEntryId", 0);
-            entry.Add("FConvertEntryId", 0);
-            entry.Add("FCheckDelivery", false);
-            entry.Add("FBomEntryId", 0);
-
-            // 批号（可选）
-            if (!string.IsNullOrEmpty(lot))
-            {
-                entry.Add("FLot", Creat_JsonChildObject("FNumber", lot));
-            }
-
-            JArray entryArr = new JArray();
-            entryArr.Add(entry);
-
-            // 构建单据头
             JObject model = new JObject();
             model.Add("FID", 0);
-            // 单据类型：ZJDB01_SYS = 直接调拨单
             model.Add("FBillTypeID", Creat_JsonChildObject("FNUMBER", "ZJDB01_SYS"));
             model.Add("FBizType", "NORMAL");
             model.Add("FTransferDirect", "GENERAL");
             model.Add("FTransferBizType", "InnerOrgTransfer");
-            // 组织信息（默认库存组织 100）
             model.Add("FSettleOrgId", Creat_JsonChildObject("FNumber", "100"));
             model.Add("FSaleOrgId", Creat_JsonChildObject("FNumber", "100"));
             model.Add("FStockOutOrgId", Creat_JsonChildObject("FNumber", "100"));
             model.Add("FOwnerTypeOutIdHead", "BD_OwnerOrg");
             model.Add("FOwnerOutIdHead", Creat_JsonChildObject("FNumber", "100"));
             model.Add("FStockOrgId", Creat_JsonChildObject("FNumber", "100"));
-            // 税务/价格信息
             model.Add("FIsIncludedTax", true);
             model.Add("FIsPriceExcludeTax", true);
             model.Add("FExchangeTypeId", Creat_JsonChildObject("FNUMBER", "HLTX01_SYS"));
@@ -810,10 +738,76 @@ namespace kingdee.CustLI.Business.PlugInWebApi
             model.Add("FDate", nowStr);
             model.Add("FBaseCurrId", Creat_JsonChildObject("FNumber", "PRE001"));
             model.Add("FWriteOffConsign", false);
-            // 分录
-            model.Add("FBillEntry", entryArr);
-
             return model;
+        }
+
+        /// <summary>
+        /// 构建直接调拨单的分录（FBillEntry）
+        /// 字段映射：
+        ///   FMaterialNumber  → FMaterialId.FNumber（物料）
+        ///   FSrcStockNumber  → FSrcStockId.FNumber（调出仓库）
+        ///   FDestStockNumber → FDestStockId.FNumber（调入仓库）
+        ///   FQty             → FQty（数量）
+        ///   FLot             → FLot.FNumber（批号，可选）
+        /// </summary>
+        private JObject BuildTransferDirectEntry(JObject item)
+        {
+            string materialNumber = item["FMaterialNumber"] != null ? item["FMaterialNumber"].ToString() : "";
+            string srcStockNumber = item["FSrcStockNumber"] != null ? item["FSrcStockNumber"].ToString() : "";
+            string destStockNumber = item["FDestStockNumber"] != null ? item["FDestStockNumber"].ToString() : "";
+            string lot = item["FLot"] != null ? item["FLot"].ToString() : "";
+            decimal qty = ParseQty(item["FQty"]);
+
+            JObject entry = new JObject();
+            entry.Add("FRowType", "Standard");
+            entry.Add("FMaterialId", Creat_JsonChildObject("FNumber", materialNumber));
+            entry.Add("FUnitID", Creat_JsonChildObject("FNumber", "Pcs"));
+            entry.Add("FQty", qty);
+            entry.Add("FSrcStockId", Creat_JsonChildObject("FNumber", srcStockNumber));
+            entry.Add("FDestStockId", Creat_JsonChildObject("FNumber", destStockNumber));
+            entry.Add("FSrcStockStatusId", Creat_JsonChildObject("FNumber", "KCZT01_SYS"));
+            entry.Add("FDestStockStatusId", Creat_JsonChildObject("FNumber", "KCZT01_SYS"));
+            entry.Add("FBusinessDate", DateTime.Now.ToString("yyyy-MM-dd 00:00:00"));
+            entry.Add("FSrcBillTypeId", "");
+            entry.Add("FOwnerTypeOutId", "BD_OwnerOrg");
+            entry.Add("FOwnerOutId", Creat_JsonChildObject("FNumber", "100"));
+            entry.Add("FOwnerTypeId", "BD_OwnerOrg");
+            entry.Add("FOwnerId", Creat_JsonChildObject("FNumber", "100"));
+            entry.Add("FSrcBillNo", "");
+            entry.Add("FSecQty", 0.0);
+            entry.Add("FExtAuxUnitQty", 0.0);
+            entry.Add("FBaseUnitId", Creat_JsonChildObject("FNumber", "Pcs"));
+            entry.Add("FBaseQty", qty);
+            entry.Add("FISFREE", false);
+            entry.Add("FKeeperTypeId", "BD_KeeperOrg");
+            entry.Add("FActQty", 0.0);
+            entry.Add("FKeeperId", Creat_JsonChildObject("FNumber", "100"));
+            entry.Add("FKeeperTypeOutId", "BD_KeeperOrg");
+            entry.Add("FKeeperOutId", Creat_JsonChildObject("FNumber", "100"));
+            entry.Add("FDiscountRate", 0.0);
+            entry.Add("FRepairQty", 0.0);
+            entry.Add("FDestMaterialId", Creat_JsonChildObject("FNUMBER", materialNumber));
+            entry.Add("FSaleUnitId", Creat_JsonChildObject("FNumber", "Pcs"));
+            entry.Add("FSaleQty", qty);
+            entry.Add("FSalBaseQty", qty);
+            entry.Add("FPriceUnitID", Creat_JsonChildObject("FNumber", "Pcs"));
+            entry.Add("FPriceQty", qty);
+            entry.Add("FPriceBaseQty", qty);
+            entry.Add("FOutJoinQty", 0.0);
+            entry.Add("FBASEOUTJOINQTY", 0.0);
+            entry.Add("FSOEntryId", 0);
+            entry.Add("FTransReserveLink", false);
+            entry.Add("FQmEntryId", 0);
+            entry.Add("FConvertEntryId", 0);
+            entry.Add("FCheckDelivery", false);
+            entry.Add("FBomEntryId", 0);
+
+            if (!string.IsNullOrEmpty(lot))
+            {
+                entry.Add("FLot", Creat_JsonChildObject("FNumber", lot));
+            }
+
+            return entry;
         }
 
         /// <summary>

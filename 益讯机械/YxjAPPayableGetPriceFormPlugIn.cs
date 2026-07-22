@@ -1,28 +1,29 @@
 using System;
 using System.ComponentModel;
-using Kingdee.BOS.Core.Bill.PlugIn;
+using Kingdee.BOS.Core.Bill;
+using Kingdee.BOS.Core.DynamicForm.PlugIn;
 using Kingdee.BOS.Core.DynamicForm.PlugIn.Args;
 using Kingdee.BOS.Util;
 
 namespace kingdee.CustLI.Business.PlugIn
 {
     /// <summary>
-    /// 益讯机械 - 财务应付单表单"取价目表价格"按钮插件
-    /// 功能：点击 tbGetPriceForm 按钮时，将分录行价目表含税价写入对应单价字段
+    /// 益讯机械 - 财务应付单分录行工具栏"取价目表价格"按钮插件
+    /// 功能：点击 tbGetPriceForm 按钮时，遍历所有分录行，将价目表含税价写入对应单价字段
     /// </summary>
-    [Description("益讯机械-财务应付单表单按钮获取价目表价格"), HotUpdate]
-    public class YxjAPPayableGetPriceFormPlugIn : AbstractBillPlugIn
+    [Description("益讯机械-财务应付单分录行按钮获取价目表价格"), HotUpdate]
+    public class YxjAPPayableGetPriceFormPlugIn : AbstractDynamicFormPlugIn
     {
         /// <summary>
-        /// 按钮点击事件处理
+        /// 分录行工具栏按钮点击事件处理
         /// </summary>
-        /// <param name="e">按钮事件参数</param>
-        public override void ButtonClick(ButtonClickEventArgs e)
+        /// <param name="e">分录行按钮事件参数</param>
+        public override void EntryBarItemClick(BarItemClickEventArgs e)
         {
-            base.ButtonClick(e);
+            base.EntryBarItemClick(e);
 
             // 仅处理"取价目表价格"按钮
-            if (e.Key != "tbGetPriceForm")
+            if (!e.BarItemKey.Equals("tbGetPriceForm", StringComparison.OrdinalIgnoreCase))
                 return;
 
             // 读取单据头"含税"标志
@@ -77,7 +78,7 @@ namespace kingdee.CustLI.Business.PlugIn
                 }
             }
 
-            this.View.Model.Save();
+            ((IBillView)this.View).Model.Save();
         }
     }
 }
