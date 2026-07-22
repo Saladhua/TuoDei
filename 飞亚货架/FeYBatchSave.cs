@@ -946,6 +946,12 @@ namespace kingdee.CustLI.Business.PlugInWebApi
                         }
                     }
 
+                    // 未成功且无错误信息 — 兜底标记
+                    if (!foundSuccess && string.IsNullOrEmpty(detail["Message"].ToString()))
+                    {
+                        detail["Message"] = "金蝶未返回该条记录的处理结果";
+                    }
+
                     details.Add(detail);
 
                     // 统计成功/失败数
