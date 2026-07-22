@@ -44,9 +44,9 @@ namespace kingdee.CustLI.Business.PlugIn
                 string spec = bill["Specification"].ToString();
 
                 string unitNumber = "";
-                if (bill["MaterialBase"] is DynamicObject matBase)
+                if (bill["MaterialBase"] is DynamicObjectCollection matBaseColl && matBaseColl.Count > 0)
                 {
-                    if (matBase["BaseUnitId"] is DynamicObject unitObj)
+                    if (matBaseColl[0]["BaseUnitId"] is DynamicObject unitObj)
                     {
                         unitNumber = unitObj["Number"].ToString();
                     }
