@@ -182,6 +182,14 @@ namespace kingdee.CustLI.Business.PlugInWebApi
         // 金蝶 Cloud 本地地址
         private const string CloudUrl = "http://localhost/k3cloud/";
 
+        // FormId 映射：外部传入的 FormId → 调 BatchSave 时使用的实际单据标识
+        private static readonly Dictionary<string, string> ApiFormIdMapping = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            { "PRD_INSTOCK", "PRD_INSTOCK" },
+            { "STK_TransferDirect_In", "STK_TransferDirect" },
+            { "STK_TransferDirect_Out", "STK_TransferDirect" },
+        };
+
         // 登录凭据
         private string _dbId;
         private string _userName;
@@ -299,8 +307,12 @@ namespace kingdee.CustLI.Business.PlugInWebApi
                     return BuildResult(false, batchJson, 0, 0, new JArray());
                 }
 
-                // 调用金蝶 BatchSave 接口（统一使用 STK_TransferDirect 作为单据标识）
-                string apiFormId = "STK_TransferDirect";
+                // 根据映射字典获取调 BatchSave 时使用的实际 FormId
+                string apiFormId;
+                if (!ApiFormIdMapping.TryGetValue(formId, out apiFormId))
+                {
+                    return BuildResult(false, "不支持的 FormId: " + formId, 0, 0, new JArray());
+                }
                 string rawResult = BatchSaveCall(apiFormId, batchJson);
                 // 将金蝶原生返回结果映射为统一格式
                 return MapBatchSaveResult(rawResult, 1);

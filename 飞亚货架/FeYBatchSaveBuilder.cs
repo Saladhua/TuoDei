@@ -202,8 +202,11 @@ namespace kingdee.CustLI.Business.PlugInWebApi
             // 保管者
             AddField(entry, "FKeeperTypeId", "BD_KeeperOrg");
             AddField(entry, "FKeeperId", Creat_JsonChildObject("FNumber", "100"));
-            // 批号
-            AddField(entry, "FLot", Creat_JsonChildObject("FNumber", lot));
+            // 批号（为空时不发送）
+            if (!string.IsNullOrEmpty(lot))
+            {
+                AddField(entry, "FLot", Creat_JsonChildObject("FNumber", lot));
+            }
             entry.Add("FIsNew", JToken.FromObject(false));
             entry.Add("FCheckProduct", JToken.FromObject(false));
             AddField(entry, "FProductType", "1");
