@@ -19,24 +19,29 @@
  *           "FSrcStockNumber": "CK001",
  *           "FDestStockNumber": "csTest",
  *           "FLot": "",
- *           "FQty": 1
+ *           "FQty": 1,
+ *           "FSrcStockLocId": "CW01",
+ *           "FDestStockLocId": "CW02"
  *         }
  *       ]
  *     }
  *   }
  *
  *   【DataList 字段说明】
- *   ┌──────────────────────┬────────────────────────────────────────────────────┬──────────┐
- *   │ 字段                 │ 适用单据                                            │ 必填     │
- *   ├──────────────────────┼────────────────────────────────────────────────────┼──────────┤
- *   │ FMaterialNumber      │ PRD_INSTOCK / STK_TransferDirect_In/Out           │ ✅       │
- *   │ FSrcBillNo           │ PRD_INSTOCK（生产订单号）                           │ ✅       │
- *   │ FSrcStockNumber      │ STK_TransferDirect_In/Out（调出仓库）              │ ✅       │
- *   │ FDestStockNumber     │ STK_TransferDirect_In/Out（调入仓库）              │ ✅       │
- *   │ FStockNumber         │ PRD_INSTOCK（仓库）                                │ ✅       │
- *   │ FLot                 │ 全部（批号）                                       │ ❌       │
- *   │ FQty                 │ 全部（数量）                                       │ ✅       │
- *   └──────────────────────┴────────────────────────────────────────────────────┴──────────┘
+ *   ┌──────────────────────┬─────────────────────────────────────────────────────────────┬──────────┐
+ *   │ 字段                 │ 适用单据                                                     │ 必填     │
+ *   ├──────────────────────┼─────────────────────────────────────────────────────────────┼──────────┤
+ *   │ FMaterialNumber      │ PRD_INSTOCK / STK_TransferDirect_In/Out                    │ ✅       │
+ *   │ FSrcBillNo           │ PRD_INSTOCK（生产订单号）                                    │ ✅       │
+ *   │ FSrcStockNumber      │ STK_TransferDirect_In/Out（调出仓库）                       │ ✅       │
+ *   │ FDestStockNumber     │ STK_TransferDirect_In/Out（调入仓库）                       │ ✅       │
+ *   │ FStockNumber         │ PRD_INSTOCK（仓库）                                         │ ✅       │
+ *   │ FStockLocId          │ PRD_INSTOCK（仓位）                                         │ ❌       │
+ *   │ FSrcStockLocId       │ STK_TransferDirect_In/Out（调出仓位）                       │ ❌       │
+ *   │ FDestStockLocId      │ STK_TransferDirect_In/Out（调入仓位）                       │ ❌       │
+ *   │ FLot                 │ 全部（批号）                                                │ ❌       │
+ *   │ FQty                 │ 全部（数量）                                                │ ✅       │
+ *   └──────────────────────┴─────────────────────────────────────────────────────────────┴──────────┘
  *
  *   PRD_INSTOCK 请求体示例：
  *   {
@@ -51,7 +56,8 @@
  *           "FSrcBillNo": "MO2026070001",
  *           "FLot": "20260701-01",
  *           "FQty": 100,
- *           "FStockNumber": "19"
+ *           "FStockNumber": "19",
+ *           "FStockLocId": "CW01"
  *         },
  *         {
  *           "FMaterialNumber": "3.3.2.6.1",
@@ -83,6 +89,7 @@
  *   - 所有单据只执行 BatchSave（保存），不提交/不审核
  *   - 生产入库单通过 FSrcBillNo（生产订单号）与上游生产订单自动关联
  *   - 仓库编码：19=货架仓，20=中转仓，21=货架出库仓
+ *   - 仓位可选传：FStockLocId（生产入库）、FSrcStockLocId/FDestStockLocId（直接调拨单）
  *   - 默认库存组织：100
  *   - 本接口为自定义二开接口，不做热加载（HotUpdate）
  *

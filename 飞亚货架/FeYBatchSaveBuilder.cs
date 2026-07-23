@@ -121,6 +121,7 @@ namespace kingdee.CustLI.Business.PlugInWebApi
             decimal qty = ParseQty(item["FQty"]);
             string stockNumber = item["FStockNumber"]?.ToString() ?? "";
             string lot = item["FLot"]?.ToString() ?? "";
+            string stockLocId = item["FStockLocId"]?.ToString() ?? "";
 
             // 从单位字典中取当前物料的单位
             UnitInfo unitInfo = unitDict != null && unitDict.ContainsKey(materialNumber) ? unitDict[materialNumber] : null;
@@ -207,6 +208,11 @@ namespace kingdee.CustLI.Business.PlugInWebApi
             {
                 AddField(entry, "FLot", Creat_JsonChildObject("FNumber", lot));
             }
+            // 仓位（为空时不发送）
+            if (!string.IsNullOrEmpty(stockLocId))
+            {
+                AddField(entry, "FStockLocId", Creat_JsonChildObject("FNumber", stockLocId));
+            }
             entry.Add("FIsNew", JToken.FromObject(false));
             entry.Add("FCheckProduct", JToken.FromObject(false));
             AddField(entry, "FProductType", "1");
@@ -281,6 +287,8 @@ namespace kingdee.CustLI.Business.PlugInWebApi
             string srcStockNumber = item["FSrcStockNumber"] != null ? item["FSrcStockNumber"].ToString() : "";
             string destStockNumber = item["FDestStockNumber"] != null ? item["FDestStockNumber"].ToString() : "";
             string lot = item["FLot"] != null ? item["FLot"].ToString() : "";
+            string srcStockLocId = item["FSrcStockLocId"]?.ToString() ?? "";
+            string destStockLocId = item["FDestStockLocId"]?.ToString() ?? "";
             decimal qty = ParseQty(item["FQty"]);
 
             UnitInfo unitInfo = unitDict != null && unitDict.ContainsKey(materialNumber) ? unitDict[materialNumber] : null;
@@ -334,6 +342,15 @@ namespace kingdee.CustLI.Business.PlugInWebApi
             if (!string.IsNullOrEmpty(lot))
             {
                 entry.Add("FLot", Creat_JsonChildObject("FNumber", lot));
+            }
+
+            if (!string.IsNullOrEmpty(srcStockLocId))
+            {
+                entry.Add("FSrcStockLocId", Creat_JsonChildObject("FNumber", srcStockLocId));
+            }
+            if (!string.IsNullOrEmpty(destStockLocId))
+            {
+                entry.Add("FDestStockLocId", Creat_JsonChildObject("FNumber", destStockLocId));
             }
 
             return entry;
