@@ -211,7 +211,11 @@ namespace kingdee.CustLI.Business.PlugInWebApi
             // 仓位（为空时不发送）
             if (!string.IsNullOrEmpty(stockLocId))
             {
-                AddField(entry, "FStockLocId", Creat_JsonChildObject("FNumber", stockLocId));
+                JObject stockLocObj = new JObject();
+                JObject innerLoc = new JObject();
+                innerLoc.Add("FNumber", stockLocId);
+                stockLocObj.Add("FSTOCKLOCID__FF100001", innerLoc);
+                entry.Add("FStockLocId", stockLocObj);
             }
             entry.Add("FIsNew", JToken.FromObject(false));
             entry.Add("FCheckProduct", JToken.FromObject(false));
@@ -346,11 +350,19 @@ namespace kingdee.CustLI.Business.PlugInWebApi
 
             if (!string.IsNullOrEmpty(srcStockLocId))
             {
-                entry.Add("FSrcStockLocId", Creat_JsonChildObject("FNumber", srcStockLocId));
+                JObject srcLocObj = new JObject();
+                JObject innerLoc = new JObject();
+                innerLoc.Add("FNumber", srcStockLocId);
+                srcLocObj.Add("FSRCSTOCKLOCID__FF100001", innerLoc);
+                entry.Add("FSrcStockLocId", srcLocObj);
             }
             if (!string.IsNullOrEmpty(destStockLocId))
             {
-                entry.Add("FDestStockLocId", Creat_JsonChildObject("FNumber", destStockLocId));
+                JObject destLocObj = new JObject();
+                JObject innerLoc = new JObject();
+                innerLoc.Add("FNumber", destStockLocId);
+                destLocObj.Add("FDESTSTOCKLOCID__FF100001", innerLoc);
+                entry.Add("FDestStockLocId", destLocObj);
             }
 
             return entry;
