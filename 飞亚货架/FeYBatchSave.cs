@@ -190,6 +190,13 @@ namespace kingdee.CustLI.Business.PlugInWebApi
         // 登录成功后保存 Cookie，后续请求携带此 Cookie 保持会话
         private CookieContainer _cookieContainer;
 
+        private class UnitInfo
+        {
+            public string BaseUnitNumber { get; set; }
+            public string StoreUnitNumber { get; set; }
+            public string SaleUnitNumber { get; set; }
+        }
+
         public FeYBatchSave(KDServiceContext context)
             : base(context)
         {
@@ -383,6 +390,54 @@ namespace kingdee.CustLI.Business.PlugInWebApi
             return "存在数量为0或无效的物料：" + string.Join("；", errors);
         }
 
+        private Dictionary<string, UnitInfo> BatchQueryUnitDict(List<string> materialNumbers)
+        {
+            var result = new Dictionary<string, UnitInfo>(StringComparer.OrdinalIgnoreCase);
+            if (materialNumbers == null || materialNumbers.Count == 0) return result;
+
+            var distinctMats = materialNumbers.Where(m => !string.IsNullOrEmpty(m)).Distinct().ToList();
+            if (distinctMats.Count == 0) return result;
+
+            string safeNumbers = string.Join("','", distinctMats.Select(m => m.Replace("'", "''")));
+            string sql = $@"SELECT
+    m.FNUMBER,
+    u1.FNUMBER AS FBaseUnitNumber,
+    u2.FNUMBER AS FStoreUnitNumber,
+    u3.FNUMBER AS FSaleUnitNumber
+FROM T_BD_MATERIAL m
+LEFT JOIN T_BD_MATERIALBASE mb ON m.FMATERIALID = mb.FMATERIALID
+LEFT JOIN T_BD_MATERIALSTOCK ms ON m.FMATERIALID = ms.FMATERIALID
+LEFT JOIN T_BD_MATERIALSALE ms2 ON m.FMATERIALID = ms2.FMATERIALID
+LEFT JOIN T_BD_UNIT u1 ON mb.FBASEUNITID = u1.FUnitID
+LEFT JOIN T_BD_UNIT u2 ON ms.FSTOREUNITID = u2.FUnitID
+LEFT JOIN T_BD_UNIT u3 ON ms2.FSALEUNITID = u3.FUnitID
+WHERE m.FNUMBER IN ('{safeNumbers}')";
+
+            try
+            {
+                var rows = DBUtils.ExecuteDynamicObject(this.KDContext.Session.AppContext, sql);
+                if (rows != null)
+                {
+                    foreach (var row in rows)
+                    {
+                        string fn = row["FNUMBER"]?.ToString() ?? "";
+                        if (string.IsNullOrEmpty(fn)) continue;
+                        result[fn] = new UnitInfo
+                        {
+                            BaseUnitNumber = row["FBaseUnitNumber"]?.ToString() ?? "",
+                            StoreUnitNumber = row["FStoreUnitNumber"]?.ToString() ?? "",
+                            SaleUnitNumber = row["FSaleUnitNumber"]?.ToString() ?? ""
+                        };
+                    }
+                }
+            }
+            catch
+            {
+            }
+
+            return result;
+        }
+
         /// <summary>
         /// 安全解析数量值，转换失败返回 0
         /// </summary>
@@ -546,6 +601,17 @@ namespace kingdee.CustLI.Business.PlugInWebApi
             // Model 数组：每行数据对应一个 Model
             JArray modelArr = new JArray();
 
+            // 收集所有物料编码，批量查询单位信息
+            List<string> allMatNumbers = new List<string>();
+            foreach (var item in dataList)
+            {
+                JObject jo = item as JObject;
+                string mat = jo != null && jo["FMaterialNumber"] != null ? jo["FMaterialNumber"].ToString() : "";
+                if (!string.IsNullOrEmpty(mat))
+                    allMatNumbers.Add(mat);
+            }
+            var unitDict = BatchQueryUnitDict(allMatNumbers);
+
             switch (formId)
             {
                 case "PRD_INSTOCK":
@@ -560,7 +626,7 @@ namespace kingdee.CustLI.Business.PlugInWebApi
                         {
                             return "FSrcBillNo=" + moBillNo + "（物料 " + materialNumber + "）对应的生产订单在账套中不存在，无法生成生产入库单";
                         }
-                        modelArr.Add(BuildPrdInstockModel(jo));
+                        modelArr.Add(BuildPrdInstockModel(jo, unitDict));
                     }
                     break;
 
@@ -570,7 +636,7 @@ namespace kingdee.CustLI.Business.PlugInWebApi
                     JArray entryArr = new JArray();
                     foreach (var item in dataList)
                     {
-                        entryArr.Add(BuildTransferDirectEntry(item as JObject));
+                        entryArr.Add(BuildTransferDirectEntry(item as JObject, unitDict));
                     }
                     model.Add("FBillEntry", entryArr);
                     modelArr.Add(model);
@@ -583,7 +649,7 @@ namespace kingdee.CustLI.Business.PlugInWebApi
                     JArray entryArr = new JArray();
                     foreach (var item in dataList)
                     {
-                        entryArr.Add(BuildTransferDirectEntry(item as JObject));
+                        entryArr.Add(BuildTransferDirectEntry(item as JObject, unitDict));
                     }
                     model.Add("FBillEntry", entryArr);
                     modelArr.Add(model);
@@ -604,7 +670,7 @@ namespace kingdee.CustLI.Business.PlugInWebApi
         /// 构建生产入库单（PRD_INSTOCK）的 Model
         /// 关联上游生产订单，查询物料对应的默认车间
         /// </summary>
-        private JObject BuildPrdInstockModel(JObject item)
+        private JObject BuildPrdInstockModel(JObject item, Dictionary<string, UnitInfo> unitDict)
         {
             // 从 DataList 行中提取字段
             string moBillNo = item["FSrcBillNo"]?.ToString() ?? "";
@@ -612,6 +678,11 @@ namespace kingdee.CustLI.Business.PlugInWebApi
             decimal qty = ParseQty(item["FQty"]);
             string stockNumber = item["FStockNumber"]?.ToString() ?? "";
             string lot = item["FLot"]?.ToString() ?? "";
+
+            // 从单位字典中取当前物料的单位
+            UnitInfo unitInfo = unitDict != null && unitDict.ContainsKey(materialNumber) ? unitDict[materialNumber] : null;
+            string baseUnit = unitInfo != null && !string.IsNullOrEmpty(unitInfo.BaseUnitNumber) ? unitInfo.BaseUnitNumber : "Pcs";
+            string storeUnit = unitInfo != null && !string.IsNullOrEmpty(unitInfo.StoreUnitNumber) ? unitInfo.StoreUnitNumber : baseUnit;
 
             // 查询上游生产订单的 FID 和分录 FEntryId
             var (moFid, moEntryId) = GetMoIds(moBillNo, materialNumber);
@@ -649,13 +720,13 @@ namespace kingdee.CustLI.Business.PlugInWebApi
             AddField(entry, "FSrcEntryId", moEntryId);
             AddField(entry, "FMaterialId", Creat_JsonChildObject("FNumber", materialNumber));
             // 单位信息
-            AddField(entry, "FUnitID", Creat_JsonChildObject("FNumber", "Pcs"));
+            AddField(entry, "FUnitID", Creat_JsonChildObject("FNumber", baseUnit));
             // 数量
             AddField(entry, "FMustQty", qty);
             AddField(entry, "FRealQty", qty);
             AddField(entry, "FCostRate", 100.0);
             // 基本单位数量
-            AddField(entry, "FBaseUnitId", Creat_JsonChildObject("FNumber", "Pcs"));
+            AddField(entry, "FBaseUnitId", Creat_JsonChildObject("FNumber", baseUnit));
             AddField(entry, "FBaseMustQty", qty);
             AddField(entry, "FBaseRealQty", qty);
             // 货主
@@ -674,7 +745,7 @@ namespace kingdee.CustLI.Business.PlugInWebApi
             AddField(entry, "FMoEntryId", moEntryId);
             AddField(entry, "FMoEntrySeq", 1);
             // 库存单位数量
-            AddField(entry, "FStockUnitId", Creat_JsonChildObject("FNumber", "Pcs"));
+            AddField(entry, "FStockUnitId", Creat_JsonChildObject("FNumber", storeUnit));
             AddField(entry, "FStockRealQty", qty);
             // 源单类型
             AddField(entry, "FSrcBillType", "PRD_MO");
@@ -785,7 +856,7 @@ namespace kingdee.CustLI.Business.PlugInWebApi
         ///   FQty             → FQty（数量）
         ///   FLot             → FLot.FNumber（批号，可选）
         /// </summary>
-        private JObject BuildTransferDirectEntry(JObject item)
+        private JObject BuildTransferDirectEntry(JObject item, Dictionary<string, UnitInfo> unitDict)
         {
             string materialNumber = item["FMaterialNumber"] != null ? item["FMaterialNumber"].ToString() : "";
             string srcStockNumber = item["FSrcStockNumber"] != null ? item["FSrcStockNumber"].ToString() : "";
@@ -793,10 +864,14 @@ namespace kingdee.CustLI.Business.PlugInWebApi
             string lot = item["FLot"] != null ? item["FLot"].ToString() : "";
             decimal qty = ParseQty(item["FQty"]);
 
+            UnitInfo unitInfo = unitDict != null && unitDict.ContainsKey(materialNumber) ? unitDict[materialNumber] : null;
+            string baseUnit = unitInfo != null && !string.IsNullOrEmpty(unitInfo.BaseUnitNumber) ? unitInfo.BaseUnitNumber : "Pcs";
+            string saleUnit = unitInfo != null && !string.IsNullOrEmpty(unitInfo.SaleUnitNumber) ? unitInfo.SaleUnitNumber : baseUnit;
+
             JObject entry = new JObject();
             entry.Add("FRowType", "Standard");
             entry.Add("FMaterialId", Creat_JsonChildObject("FNumber", materialNumber));
-            entry.Add("FUnitID", Creat_JsonChildObject("FNumber", "Pcs"));
+            entry.Add("FUnitID", Creat_JsonChildObject("FNumber", baseUnit));
             entry.Add("FQty", qty);
             entry.Add("FSrcStockId", Creat_JsonChildObject("FNumber", srcStockNumber));
             entry.Add("FDestStockId", Creat_JsonChildObject("FNumber", destStockNumber));
@@ -811,7 +886,7 @@ namespace kingdee.CustLI.Business.PlugInWebApi
             entry.Add("FSrcBillNo", "");
             entry.Add("FSecQty", 0.0);
             entry.Add("FExtAuxUnitQty", 0.0);
-            entry.Add("FBaseUnitId", Creat_JsonChildObject("FNumber", "Pcs"));
+            entry.Add("FBaseUnitId", Creat_JsonChildObject("FNumber", baseUnit));
             entry.Add("FBaseQty", qty);
             entry.Add("FISFREE", false);
             entry.Add("FKeeperTypeId", "BD_KeeperOrg");
@@ -822,10 +897,10 @@ namespace kingdee.CustLI.Business.PlugInWebApi
             entry.Add("FDiscountRate", 0.0);
             entry.Add("FRepairQty", 0.0);
             entry.Add("FDestMaterialId", Creat_JsonChildObject("FNUMBER", materialNumber));
-            entry.Add("FSaleUnitId", Creat_JsonChildObject("FNumber", "Pcs"));
+            entry.Add("FSaleUnitId", Creat_JsonChildObject("FNumber", saleUnit));
             entry.Add("FSaleQty", qty);
             entry.Add("FSalBaseQty", qty);
-            entry.Add("FPriceUnitID", Creat_JsonChildObject("FNumber", "Pcs"));
+            entry.Add("FPriceUnitID", Creat_JsonChildObject("FNumber", baseUnit));
             entry.Add("FPriceQty", qty);
             entry.Add("FPriceBaseQty", qty);
             entry.Add("FOutJoinQty", 0.0);
