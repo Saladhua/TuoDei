@@ -186,6 +186,11 @@
     <!-- YxjTempPayableSaveServicePlugIn.cs 已废弃([Obsolete])，从编译排除 -->
     <!-- YxjTempPayableSaveFormPlugIn.cs 已废弃([Obsolete])，从编译排除 -->
     <Compile Include="飞亚货架\FeYBatchSave.cs" />
+    <Compile Include="飞亚货架\FeYBatchSaveApi.cs" />
+    <Compile Include="飞亚货架\FeYBatchSaveBuilder.cs" />
+    <Compile Include="飞亚货架\FeYBatchSaveResult.cs" />
+    <Compile Include="飞亚货架\FeYBatchSaveValidate.cs" />
+    <Compile Include="飞亚货架\FeYBatchSaveModels.cs" />
     <Compile Include="飞亚货架\FeYHttpHelper.cs" />
     <Compile Include="飞亚货架\FeYMaterialPushBillPlugIn.cs" />
     <Compile Include="飞亚货架\FeYMaterialPushServicePlugIn.cs" />
