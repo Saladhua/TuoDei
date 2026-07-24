@@ -12,6 +12,8 @@ namespace kingdee.CustLI.Business.PlugInWebApi
 {
     public partial class FeYBatchSave
     {
+        private readonly Dictionary<string, string> _stockLocSuffixCache = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+
         /// <summary>
         /// 根据 FormId 和数据列表构建 BatchSave 的完整 JSON 请求体
         /// 包含公共参数（NeedUpDateFields / IsDeleteEntry 等）和 Model 数组
@@ -211,11 +213,15 @@ namespace kingdee.CustLI.Business.PlugInWebApi
             // 仓位（为空时不发送）
             if (!string.IsNullOrEmpty(stockLocId))
             {
-                JObject stockLocObj = new JObject();
-                JObject innerLoc = new JObject();
-                innerLoc.Add("FNumber", stockLocId);
-                stockLocObj.Add("FSTOCKLOCID__FF100001", innerLoc);
-                entry.Add("FStockLocId", stockLocObj);
+                string suffix = GetStockLocFieldSuffix(stockNumber);
+                if (!string.IsNullOrEmpty(suffix))
+                {
+                    JObject stockLocObj = new JObject();
+                    JObject innerLoc = new JObject();
+                    innerLoc.Add("FNumber", stockLocId);
+                    stockLocObj.Add("FSTOCKLOCID__" + suffix, innerLoc);
+                    entry.Add("FStockLocId", stockLocObj);
+                }
             }
             entry.Add("FIsNew", JToken.FromObject(false));
             entry.Add("FCheckProduct", JToken.FromObject(false));
@@ -348,21 +354,31 @@ namespace kingdee.CustLI.Business.PlugInWebApi
                 entry.Add("FLot", Creat_JsonChildObject("FNumber", lot));
             }
 
+            // 调出仓位：入参有仓位值才查 FFLEXID 拼动态字段名，查不到则跳过
             if (!string.IsNullOrEmpty(srcStockLocId))
             {
-                JObject srcLocObj = new JObject();
-                JObject innerLoc = new JObject();
-                innerLoc.Add("FNumber", srcStockLocId);
-                srcLocObj.Add("FSRCSTOCKLOCID__FF100001", innerLoc);
-                entry.Add("FSrcStockLocId", srcLocObj);
+                string srcSuffix = GetStockLocFieldSuffix(srcStockNumber);
+                if (!string.IsNullOrEmpty(srcSuffix))
+                {
+                    JObject srcLocObj = new JObject();
+                    JObject innerLoc = new JObject();
+                    innerLoc.Add("FNumber", srcStockLocId);
+                    srcLocObj.Add("FSRCSTOCKLOCID__" + srcSuffix, innerLoc);
+                    entry.Add("FSrcStockLocId", srcLocObj);
+                }
             }
+            // 调入仓位：同上调出仓位逻辑，用调入仓库编码查
             if (!string.IsNullOrEmpty(destStockLocId))
             {
-                JObject destLocObj = new JObject();
-                JObject innerLoc = new JObject();
-                innerLoc.Add("FNumber", destStockLocId);
-                destLocObj.Add("FDESTSTOCKLOCID__FF100001", innerLoc);
-                entry.Add("FDestStockLocId", destLocObj);
+                string destSuffix = GetStockLocFieldSuffix(destStockNumber);
+                if (!string.IsNullOrEmpty(destSuffix))
+                {
+                    JObject destLocObj = new JObject();
+                    JObject innerLoc = new JObject();
+                    innerLoc.Add("FNumber", destStockLocId);
+                    destLocObj.Add("FDESTSTOCKLOCID__" + destSuffix, innerLoc);
+                    entry.Add("FDestStockLocId", destLocObj);
+                }
             }
 
             return entry;
@@ -390,6 +406,41 @@ namespace kingdee.CustLI.Business.PlugInWebApi
                 default:
                     return "";
             }
+        }
+
+        /// <summary>
+        /// 根据仓库编码查询仓位值集维度内码（FFLEXID）
+        /// 返回 "FF{FFLEXID}" 后缀，用于拼写仓位字段名
+        /// 带缓存，同一仓库只查一次
+        /// </summary>
+        private string GetStockLocFieldSuffix(string stockNumber)
+        {
+            if (string.IsNullOrEmpty(stockNumber)) return "";
+
+            if (_stockLocSuffixCache.ContainsKey(stockNumber))
+                return _stockLocSuffixCache[stockNumber];
+
+            string sql = $@"SELECT T1.FFLEXID
+FROM T_BD_STOCKFLEXITEM T1
+JOIN T_BD_STOCK T2 ON T1.FSTOCKID = T2.FSTOCKID
+WHERE T2.FNUMBER = '{stockNumber}'";
+
+            try
+            {
+                DynamicObjectCollection conStr = DBUtils.ExecuteDynamicObject(this.KDContext.Session.AppContext, sql);
+                if (conStr != null && conStr.Count > 0)
+                {
+                    string suffix = "FF" + conStr[0]["FFLEXID"].ToString();
+                    _stockLocSuffixCache[stockNumber] = suffix;
+                    return suffix;
+                }
+            }
+            catch
+            {
+            }
+
+            _stockLocSuffixCache[stockNumber] = "";
+            return "";
         }
 
         /// <summary>
