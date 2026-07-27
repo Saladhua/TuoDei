@@ -183,8 +183,8 @@
     <Compile Include="益讯机械\YxjAPPayableSaveGetPricePlugIn.cs" />
     <Compile Include="益讯机械\YxjAPPayableSubmitValidatePlugIn.cs" />
     <Compile Include="益讯机械\YxjAPPayableGetPriceFormPlugIn.cs" />
-    <!-- YxjTempPayableSaveServicePlugIn.cs 已废弃([Obsolete])，从编译排除 -->
-    <!-- YxjTempPayableSaveFormPlugIn.cs 已废弃([Obsolete])，从编译排除 -->
+    <!-- YxjTempPayableSaveServicePlugIn.cs 已废弃([Obsolete])从编译排除 -->
+    <!-- YxjTempPayableSaveFormPlugIn.cs 已废弃([Obsolete])从编译排除 -->
     <Compile Include="飞亚货架\FeYBatchSave.cs" />
     <Compile Include="飞亚货架\FeYBatchSaveApi.cs" />
     <Compile Include="飞亚货架\FeYBatchSaveBuilder.cs" />
@@ -195,6 +195,12 @@
     <Compile Include="飞亚货架\FeYMaterialPushBillPlugIn.cs" />
     <Compile Include="飞亚货架\FeYMaterialPushServicePlugIn.cs" />
   </ItemGroup>
-  <ItemGroup />
+  <ItemGroup>
+    <Compile Include="林蓝汽车\公有方法\LinLanXQPriceQueryHelper.cs" />
+    <Compile Include="林蓝汽车\LinLanXQSalQuotationGetPricePlugIn.cs" />
+    <Compile Include="林蓝汽车\LinLanXQSalOrderGetPricePlugIn.cs" />
+    <Compile Include="林蓝汽车\LinLanXQCustMatMappingGetMaterialPlugIn.cs" />
+    <Compile Include="林蓝汽车\LinLanXQBomPackMethodValidator.cs" />
+  </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
 </Project>
