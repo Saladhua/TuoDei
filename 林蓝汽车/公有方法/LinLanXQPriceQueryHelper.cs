@@ -103,8 +103,22 @@ namespace kingdee.CustLI.Business.PlugIn
             }
 
             sql.AppendLine(")");
-            // 按日期+单据号降序排列，保证每组条件的第一条记录是最近生效的历史价格
-            sql.AppendLine("ORDER BY a.FDATE DESC, a.FBILLNO DESC");
+
+            // 根据价格类型动态调整排序，保证每组条件的第一条记录即为目标价格
+            // PriceType: "1"=最新价格, "2"=最低价格, "3"=最高价格; ""=销售订单取最新价
+            string priceType = requests.Count > 0 ? requests[0].PriceType : "";
+            switch (priceType)
+            {
+                case "2":
+                    sql.AppendLine("ORDER BY e.FTAXPRICE ASC, a.FDATE DESC");
+                    break;
+                case "3":
+                    sql.AppendLine("ORDER BY e.FTAXPRICE DESC, a.FDATE DESC");
+                    break;
+                default:
+                    sql.AppendLine("ORDER BY a.FDATE DESC, a.FBILLNO DESC");
+                    break;
+            }
 
             DataSet ds = null;
             try

@@ -29,14 +29,14 @@ namespace kingdee.CustLI.Business.PlugIn
         {
             base.ButtonClick(e);
 
-            // 只处理【匹配物料获取价格】按钮，按钮标识在BOS元数据中注册为 F_CustLI_MatchGetPriceQ
-            if (e.Key != "F_CustLI_MatchGetPriceQ") return;
+            // 只处理【匹配物料获取价格】按钮，按钮标识在BOS元数据中注册为 QSGA_tbButton
+            if (e.Key != "QSGA_tbButton") return;
 
             DynamicObject billObj = this.View.Model.DataObject;
             if (billObj == null) return;
             
             // ---- 读取表头信息 ----
-            // 报价单取价维度比销售订单多：国别范围(F_CustLI_CountryRange)和价格类型(F_CustLI_PriceType)
+            // 报价单取价维度比销售订单多：国别范围(F_CustLI_CountryRange1)和价格类型(F_CustLI_PriceType)
             DynamicObject headObj = billObj;
             long customerId = 0;
             long settleCurrId = 0;
@@ -64,9 +64,9 @@ namespace kingdee.CustLI.Business.PlugIn
             // 注意：取价时若匹配不到价格，明细行价格留空不做赋值。
             // 此留空行为由客户明确确认，保留此注释作为日后Bug回溯依据。
             // （2026-07-27 客户确认：匹配不到价格时留空，系统会做校验）
-            if (headObj["F_CustLI_CountryRange"] != null)
+            if (headObj["F_CustLI_CountryRange1"] != null)
             {
-                DynamicObject countryObj = headObj["F_CustLI_CountryRange"] as DynamicObject;
+                DynamicObject countryObj = headObj["F_CustLI_CountryRange1"] as DynamicObject;
                 if (countryObj != null)
                 {
                     countryRangeId = Convert.ToInt64(countryObj["Id"]);
@@ -83,7 +83,7 @@ namespace kingdee.CustLI.Business.PlugIn
             if (entryCollection == null || entryCollection.Count == 0) return;
 
             // ---- 遍历明细构造取价请求列表 ----
-            // 报价单取价传入图号(F_CustLI_DrawingNo)作为辅助匹配条件，提高匹配精度
+            // 报价单取价传入图号(F_QSGA_Text_33z)作为辅助匹配条件，提高匹配精度
             List<LinLanXQPriceQueryHelper.PriceRequest> requests = new List<LinLanXQPriceQueryHelper.PriceRequest>();
 
             foreach (DynamicObject entry in entryCollection)
@@ -100,9 +100,9 @@ namespace kingdee.CustLI.Business.PlugIn
                     }
                 }
 
-                if (entry["F_CustLI_DrawingNo"] != null)
+                if (entry["F_QSGA_Text_33z"] != null)
                 {
-                    drawingNo = entry["F_CustLI_DrawingNo"].ToString();
+                    drawingNo = entry["F_QSGA_Text_33z"].ToString();
                 }
 
                 // 跳过未填物料的空行
