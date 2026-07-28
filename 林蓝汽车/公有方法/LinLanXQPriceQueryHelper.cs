@@ -25,7 +25,7 @@ namespace kingdee.CustLI.Business.PlugIn
             public long CustomerId;       // 客户内码，匹配 T_SAL_ORDER.FCUSTID
             public long SettleCurrId;     // 结算币别内码，匹配 T_SAL_ORDER.FSETTLECURRID
             public long MaterialId;       // 物料内码，匹配 T_SAL_ORDERENTRY.FMATERIALID
-            public string DrawingNo;      // 图号（销售报价单使用），匹配 T_SAL_ORDERENTRY.FNOTE
+            public string DrawingNo;      // 产品图号（销售报价单使用），匹配 T_SAL_ORDERENTRY.F_QSGA_Text_33z
             public decimal TaxRate;       // 税率，匹配 T_SAL_ORDERENTRY.FTAXRATE
             public long CountryRangeId;   // 国别范围（销售报价单使用），辅助报价单取价过滤
             public string PriceType;      // 价格类型（销售报价单使用），辅助报价单取价过滤
@@ -95,8 +95,8 @@ namespace kingdee.CustLI.Business.PlugIn
                 // 图号为可选项：销售订单通常不含图号，销售报价单可能包含
                 if (!string.IsNullOrEmpty(req.DrawingNo))
                 {
-                    // 图号存于 FNOTE 字段，转义单引号防 SQL 注入
-                    sql.AppendLine("     AND e.FNOTE = '" + req.DrawingNo.Replace("'", "''") + "'");
+                    // 产品图号存于 F_QSGA_Text_33z 字段，转义单引号防 SQL 注入
+                    sql.AppendLine("     AND e.F_QSGA_Text_33z = '" + req.DrawingNo.Replace("'", "''") + "'");
                 }
 
                 sql.AppendLine("    )");
