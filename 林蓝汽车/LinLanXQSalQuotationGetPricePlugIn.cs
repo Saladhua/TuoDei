@@ -55,13 +55,18 @@ namespace kingdee.CustLI.Business.PlugIn
 
             if (billObj["SAL_QUOTATIONFIN"] != null)
             {
-                DynamicObject finObj = billObj["SAL_QUOTATIONFIN"] as DynamicObject;
-                if (finObj != null && finObj["SettleCurrId"] != null)
+                DynamicObjectCollection finCollection = billObj["SAL_QUOTATIONFIN"] as DynamicObjectCollection;
+                if (finCollection != null && finCollection.Count > 0)
                 {
-                    DynamicObject currObj = finObj["SettleCurrId"] as DynamicObject;
-                    if (currObj != null)
+                    DynamicObject finObj = finCollection[0];
+                    if (finObj["SettleCurrId"] != null)
                     {
-                        settleCurrId = Convert.ToInt64(currObj["Id"]);
+                        DynamicObject currObj = finObj["SettleCurrId"] as DynamicObject;
+                        if (currObj != null)
+                        {
+                            long.TryParse(currObj["Id"]?.ToString(), out long parsedId);
+                            settleCurrId = parsedId;
+                        }
                     }
                 }
             }
