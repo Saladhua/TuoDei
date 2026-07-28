@@ -41,18 +41,18 @@ namespace kingdee.CustLI.Business.PlugIn
             long customerId = 0;
             long settleCurrId = 0;
 
-            if (headObj["FCUSTID"] != null)
+            if (headObj["CUSTID"] != null)
             {
-                DynamicObject custObj = headObj["FCUSTID"] as DynamicObject;
+                DynamicObject custObj = headObj["CUSTID"] as DynamicObject;
                 if (custObj != null)
                 {
                     customerId = Convert.ToInt64(custObj["Id"]);
                 }
             }
 
-            if (headObj["FSettleCurrId"] != null)
+            if (headObj["SettleCurrId"] != null)
             {
-                DynamicObject currObj = headObj["FSettleCurrId"] as DynamicObject;
+                DynamicObject currObj = headObj["SettleCurrId"] as DynamicObject;
                 if (currObj != null)
                 {
                     settleCurrId = Convert.ToInt64(currObj["Id"]);
@@ -72,18 +72,18 @@ namespace kingdee.CustLI.Business.PlugIn
                 string drawingNo = "";
                 decimal taxRate = 0m;
 
-                if (entry["FMATERIALID"] != null)
+                if (entry["MATERIALID"] != null)
                 {
-                    DynamicObject matObj = entry["FMATERIALID"] as DynamicObject;
+                    DynamicObject matObj = entry["MATERIALID"] as DynamicObject;
                     if (matObj != null)
                     {
                         materialId = Convert.ToInt64(matObj["Id"]);
                     }
                 }
 
-                if (entry["FTAXRATE"] != null)
+                if (entry["TAXRATE"] != null)
                 {
-                    taxRate = Convert.ToDecimal(entry["FTAXRATE"]);
+                    taxRate = Convert.ToDecimal(entry["TAXRATE"]);
                 }
 
                 // 跳过未填物料的空行，避免无效取价请求
@@ -113,9 +113,9 @@ namespace kingdee.CustLI.Business.PlugIn
             foreach (DynamicObject entry in entryCollection)
             {
                 long materialId = 0;
-                if (entry["FMATERIALID"] != null)
+                if (entry["MATERIALID"] != null)
                 {
-                    DynamicObject matObj = entry["FMATERIALID"] as DynamicObject;
+                    DynamicObject matObj = entry["MATERIALID"] as DynamicObject;
                     if (matObj != null)
                     {
                         materialId = Convert.ToInt64(matObj["Id"]);

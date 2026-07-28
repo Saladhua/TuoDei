@@ -44,18 +44,18 @@ namespace kingdee.CustLI.Business.PlugIn
             long countryRangeId = 0;
             string priceType = "";
 
-            if (headObj["FCUSTID"] != null)
+            if (headObj["CUSTID"] != null)
             {
-                DynamicObject custObj = headObj["FCUSTID"] as DynamicObject;
+                DynamicObject custObj = headObj["CUSTID"] as DynamicObject;
                 if (custObj != null)
                 {
                     customerId = Convert.ToInt64(custObj["Id"]);
                 }
             }
 
-            if (headObj["FSettleCurrId"] != null)
+            if (headObj["SettleCurrId"] != null)
             {
-                DynamicObject currObj = headObj["FSettleCurrId"] as DynamicObject;
+                DynamicObject currObj = headObj["SettleCurrId"] as DynamicObject;
                 if (currObj != null)
                 {
                     settleCurrId = Convert.ToInt64(currObj["Id"]);
@@ -92,9 +92,9 @@ namespace kingdee.CustLI.Business.PlugIn
                 long materialId = 0;
                 string drawingNo = "";
 
-                if (entry["FMATERIALID"] != null)
+                if (entry["MATERIALID"] != null)
                 {
-                    DynamicObject matObj = entry["FMATERIALID"] as DynamicObject;
+                    DynamicObject matObj = entry["MATERIALID"] as DynamicObject;
                     if (matObj != null)
                     {
                         materialId = Convert.ToInt64(matObj["Id"]);
@@ -134,9 +134,9 @@ namespace kingdee.CustLI.Business.PlugIn
             foreach (DynamicObject entry in entryCollection)
             {
                 long materialId = 0;
-                if (entry["FMATERIALID"] != null)
+                if (entry["MATERIALID"] != null)
                 {
-                    DynamicObject matObj = entry["FMATERIALID"] as DynamicObject;
+                    DynamicObject matObj = entry["MATERIALID"] as DynamicObject;
                     if (matObj != null)
                     {
                         materialId = Convert.ToInt64(matObj["Id"]);
