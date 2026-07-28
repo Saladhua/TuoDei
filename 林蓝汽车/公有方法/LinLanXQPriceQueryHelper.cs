@@ -61,53 +61,46 @@ namespace kingdee.CustLI.Business.PlugIn
                 return new List<PriceResult>();
 
             // ---- 构造批量查询 SQL ----
-            // 动态拼接多组 OR 条件，每组对应一个明细行的取价需求
-            // 只查已审核单据(FDOCUMENTSTATUS='C')，未审核的单据价格不纳入参考
+            // 所有请求的公共条件相同（表头：客户/结算币别/国别范围/价格类型），只有物料不同
+            // 公共条件提到 WHERE 层，物料用 IN 列表，避免 N 个 OR 重复相同条件
+            var firstReq = requests[0];
+
             StringBuilder sql = new StringBuilder();
-            sql.AppendLine("SELECT");
-            sql.AppendLine("    a.FID,");
-            sql.AppendLine("    e.FENTRYID,");
-            sql.AppendLine("    e.FMATERIALID,");
-            sql.AppendLine("    f.FTAXPRICE,");
-            sql.AppendLine("    f.FPRICE,");
-            sql.AppendLine("    f.FTAXRATE,");
-            sql.AppendLine("    fin.FSETTLECURRID,");
-            sql.AppendLine("    a.FBILLNO,");
-            sql.AppendLine("    a.FDATE,");
-            sql.AppendLine("    e.FSEQ");
+            sql.AppendLine("SELECT a.FID, e.FENTRYID, e.FMATERIALID,");
+            sql.AppendLine("       f.FTAXPRICE, f.FPRICE, f.FTAXRATE,");
+            sql.AppendLine("       fin.FSETTLECURRID, a.FBILLNO, a.FDATE, e.FSEQ");
             sql.AppendLine("FROM T_SAL_ORDER a");
             sql.AppendLine("JOIN T_SAL_ORDERENTRY e ON a.FID = e.FID");
             sql.AppendLine("JOIN T_SAL_ORDERENTRY_F f ON e.FENTRYID = f.FENTRYID");
             sql.AppendLine("JOIN T_SAL_ORDERFIN fin ON a.FID = fin.FID");
-            sql.AppendLine("WHERE a.FDOCUMENTSTATUS = 'C'");  // C=已审核
-            sql.AppendLine("AND (");
+            sql.AppendLine("LEFT JOIN T_BD_CUSTOMER c ON a.FCUSTID = c.FCUSTID");
+            sql.AppendLine("WHERE a.FDOCUMENTSTATUS = 'C'");
 
-            // 动态拼接多组 OR 条件：每组精确匹配(客户+结算币别+物料+税率+可选的图号)
+            // 客户：有值才过滤
+            if (firstReq.CustomerId != 0)
+                sql.AppendLine("AND a.FCUSTID = " + firstReq.CustomerId.ToString());
+
+            // 结算币别：有值才过滤
+            if (firstReq.SettleCurrId != 0)
+                sql.AppendLine("AND fin.FSETTLECURRID = " + firstReq.SettleCurrId.ToString());
+
+            // 国别范围：有值才过滤（取客户基础资料上的 FCOUNTRY 字段）
+            if (!string.IsNullOrEmpty(firstReq.CountryRangeId))
+                sql.AppendLine("AND c.FCOUNTRY = '" + firstReq.CountryRangeId.Replace("'", "''") + "'");
+
+            // 图号：非空（去除空格）才过滤
+            if (!string.IsNullOrWhiteSpace(firstReq.DrawingNo))
+                sql.AppendLine("AND e.F_QSGA_TEXT_33Z = '" + firstReq.DrawingNo.Replace("'", "''") + "'");
+
+            // 税率：仅销售订单取价需要，报价单取价不匹配税率
+            if (!firstReq.IsForQuotation)
+                sql.AppendLine("AND f.FTAXRATE = " + firstReq.TaxRate.ToString("F6"));
+
+            // 物料 IN 列表
+            string[] matIds = new string[requests.Count];
             for (int i = 0; i < requests.Count; i++)
-            {
-                var req = requests[i];
-                if (i > 0) sql.AppendLine("OR");
-
-                sql.AppendLine("    (a.FCUSTID = " + req.CustomerId.ToString());
-                sql.AppendLine("     AND fin.FSETTLECURRID = " + req.SettleCurrId.ToString());
-                sql.AppendLine("     AND e.FMATERIALID = " + req.MaterialId.ToString());
-                // 销售订单取价需要匹配税率；报价单取价不匹配税率，由客户+币别+物料+图号确定价格
-                if (!req.IsForQuotation)
-                {
-                    sql.AppendLine("     AND f.FTAXRATE = " + req.TaxRate.ToString("F6"));
-                }
-
-                // 图号为可选项：销售订单通常不含图号，销售报价单可能包含
-                if (!string.IsNullOrEmpty(req.DrawingNo))
-                {
-                    // 产品图号存于 F_QSGA_TEXT_33Z 字段，转义单引号防 SQL 注入
-                    sql.AppendLine("     AND e.F_QSGA_TEXT_33Z = '" + req.DrawingNo.Replace("'", "''") + "'");
-                }
-
-                sql.AppendLine("    )");
-            }
-
-            sql.AppendLine(")");
+                matIds[i] = requests[i].MaterialId.ToString();
+            sql.AppendLine("AND e.FMATERIALID IN (" + string.Join(",", matIds) + ")");
 
             // 根据价格类型动态调整排序，保证每组条件的第一条记录即为目标价格
             // PriceType: "1"=最新价格, "2"=最低价格, "3"=最高价格; ""=销售订单取最新价
@@ -205,14 +198,9 @@ namespace kingdee.CustLI.Business.PlugIn
             return ConvertDictToList(resultDict, requests);
         }
 
-        /// <summary>
-        /// 构建取价请求的字典 key：格式为 "物料内码_结算币别内码"
-        /// 注意：目前 key 仅包含物料和币别两个维度，不包含客户，在嵌套循环匹配时通过 CustomerId 二次过滤。
-        /// 如需扩展维度（如加入客户），需同步修改 BatchQueryPrices 中的匹配逻辑。
-        /// </summary>
         private static string BuildKey(PriceRequest req)
         {
-            return req.MaterialId.ToString() + "_" + req.SettleCurrId.ToString();
+            return req.MaterialId.ToString() + "_" + req.SettleCurrId.ToString() + "_" + req.CountryRangeId;
         }
 
         /// <summary>
