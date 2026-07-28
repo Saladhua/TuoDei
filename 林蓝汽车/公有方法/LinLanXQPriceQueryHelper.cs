@@ -91,8 +91,11 @@ namespace kingdee.CustLI.Business.PlugIn
                 sql.AppendLine("    (a.FCUSTID = " + req.CustomerId.ToString());
                 sql.AppendLine("     AND fin.FSETTLECURRID = " + req.SettleCurrId.ToString());
                 sql.AppendLine("     AND e.FMATERIALID = " + req.MaterialId.ToString());
-                // 税率格式化为 6 位小数确保与数据库中存储精度一致，防止浮点数截断导致匹配不上
-                sql.AppendLine("     AND f.FTAXRATE = " + req.TaxRate.ToString("F6"));
+                // 销售订单取价需要匹配税率；报价单取价不匹配税率，由客户+币别+物料+图号确定价格
+                if (!req.IsForQuotation)
+                {
+                    sql.AppendLine("     AND f.FTAXRATE = " + req.TaxRate.ToString("F6"));
+                }
 
                 // 图号为可选项：销售订单通常不含图号，销售报价单可能包含
                 if (!string.IsNullOrEmpty(req.DrawingNo))

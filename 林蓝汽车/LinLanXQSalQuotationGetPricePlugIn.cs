@@ -116,7 +116,7 @@ namespace kingdee.CustLI.Business.PlugIn
                     MaterialId = materialId,
                     DrawingNo = drawingNo,
                     PriceType = priceType,
-                    TaxRate = 0m,            // 报价单传0税率，由公共帮助类在SQL中通过FTAXRATE匹配
+                    TaxRate = 0m,            // 报价单取价不匹配税率，由帮助类根据 IsForQuotation 跳过 FTAXRATE 条件
                     IsForQuotation = true     // 报价单取价标记
                 };
                 requests.Add(req);
