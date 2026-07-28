@@ -30,7 +30,7 @@ namespace kingdee.CustLI.Business.PlugIn
             base.EntryBarItemClick(e);
 
             // 只处理【匹配物料获取价格】按钮，按钮标识在BOS元数据中注册为 F_CustLI_MatchGetPriceO
-            if (!e.BarItemKey.Equals("F_CustLI_MatchGetPriceO", StringComparison.OrdinalIgnoreCase)) return;
+            if (!e.BarItemKey.Equals("QSGA_tbButton", StringComparison.OrdinalIgnoreCase)) return;
 
             DynamicObject billObj = this.View.Model.DataObject;
             if (billObj == null) return;
