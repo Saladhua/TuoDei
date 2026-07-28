@@ -27,7 +27,7 @@ namespace kingdee.CustLI.Business.PlugIn
             public long MaterialId;       // 物料内码，匹配 T_SAL_ORDERENTRY.FMATERIALID
             public string DrawingNo;      // 产品图号（销售报价单使用），匹配 T_SAL_ORDERENTRY.F_QSGA_TEXT_33Z
             public decimal TaxRate;       // 税率，匹配 T_SAL_ORDERENTRY.FTAXRATE
-            public long CountryRangeId;   // 国别范围（销售报价单使用），辅助报价单取价过滤
+            public string CountryRangeId;   // 国别范围（销售报价单使用），辅助报价单取价过滤
             public string PriceType;      // 价格类型（销售报价单使用），辅助报价单取价过滤
             public bool IsForQuotation;   // true=报价单取价, false=销售订单取价
         }

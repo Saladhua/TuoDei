@@ -41,7 +41,7 @@ namespace kingdee.CustLI.Business.PlugIn
             DynamicObject headObj = billObj;
             long customerId = 0;
             long settleCurrId = 0;
-            long countryRangeId = 0;
+            string countryRangeId = "";
             string priceType = "";
 
             if (headObj["CUSTID"] != null)
@@ -72,9 +72,9 @@ namespace kingdee.CustLI.Business.PlugIn
             if (headObj["F_CustLI_CountryRange1"] != null)
             {
                 DynamicObject countryObj = headObj["F_CustLI_CountryRange1"] as DynamicObject;
-                if (countryObj != null)
+                if (countryObj != null && countryObj["Id"] != null)
                 {
-                    countryRangeId = Convert.ToInt64(countryObj["Id"]);
+                    countryRangeId = countryObj["Id"].ToString();
                 }
             }
 
