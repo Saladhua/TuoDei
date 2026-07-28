@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using Kingdee.BOS;
+using Kingdee.BOS.Core.Bill;
 using Kingdee.BOS.Core.Bill.PlugIn;
 using Kingdee.BOS.Core.DynamicForm.PlugIn;
 using Kingdee.BOS.Core.DynamicForm.PlugIn.Args;
@@ -25,12 +26,12 @@ namespace kingdee.CustLI.Business.PlugIn
         /// 按钮点击事件处理：触发销售报价单批量取价逻辑
         /// </summary>
         /// <param name="e">按钮事件参数，包含按钮标识Key</param>
-        public override void ButtonClick(ButtonClickEventArgs e)
+        public override void EntryBarItemClick(BarItemClickEventArgs e)
         {
-            base.ButtonClick(e);
+            base.EntryBarItemClick(e);
 
             // 只处理【匹配物料获取价格】按钮，按钮标识在BOS元数据中注册为 QSGA_tbButton
-            if (e.Key != "QSGA_tbButton") return;
+            if (!e.BarItemKey.Equals("QSGA_tbButton", StringComparison.OrdinalIgnoreCase)) return;
 
             DynamicObject billObj = this.View.Model.DataObject;
             if (billObj == null) return;
@@ -158,6 +159,9 @@ namespace kingdee.CustLI.Business.PlugIn
                 }
                 index++;
             }
+
+            // 保存修改到数据库
+            ((IBillView)this.View).Model.Save();
         }
     }
 }
