@@ -67,7 +67,7 @@ namespace kingdee.CustLI.Business.PlugIn
             }
 
             // 获取明细行集合：SAL_ORDERENTRY 为销售订单的单据体标识
-            DynamicObjectCollection entryCollection = billObj["SAL_ORDERENTRY"] as DynamicObjectCollection;
+            DynamicObjectCollection entryCollection = billObj["SaleOrderEntry"] as DynamicObjectCollection;
             if (entryCollection == null || entryCollection.Count == 0) return;
 
             // ---- 遍历明细构造取价请求列表 ----
