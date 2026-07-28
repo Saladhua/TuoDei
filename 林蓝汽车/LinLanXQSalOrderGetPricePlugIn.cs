@@ -50,12 +50,19 @@ namespace kingdee.CustLI.Business.PlugIn
                 }
             }
 
-            if (headObj["SettleCurrId"] != null)
+            // 结算币别从SaleOrderFinance子实体取，与报价单从SAL_QUOTATIONFIN取数方式一致
+            DynamicObjectCollection finCollection = billObj["SaleOrderFinance"] as DynamicObjectCollection;
+            if (finCollection != null && finCollection.Count > 0)
             {
-                DynamicObject currObj = headObj["SettleCurrId"] as DynamicObject;
-                if (currObj != null)
+                DynamicObject finObj = finCollection[0];
+                if (finObj["SettleCurrId"] != null)
                 {
-                    settleCurrId = Convert.ToInt64(currObj["Id"]);
+                    DynamicObject currObj = finObj["SettleCurrId"] as DynamicObject;
+                    if (currObj != null)
+                    {
+                        long.TryParse(currObj["Id"]?.ToString(), out long parsedId);
+                        settleCurrId = parsedId;
+                    }
                 }
             }
 
