@@ -157,8 +157,8 @@ namespace kingdee.CustLI.Business.PlugIn
                     long materialId = Convert.ToInt64(row["FMATERIALID"]);
                     long settleCurrId = Convert.ToInt64(row["FSETTLECURRID"]);
                     string billNo = row["FBILLNO"].ToString();
-                    decimal taxPrice = Convert.ToDecimal(row["FTAXPRICE"]);
-                    decimal price = Convert.ToDecimal(row["FPRICE"]);
+                    decimal taxPrice = row["FTAXPRICE"] == DBNull.Value ? 0m : Convert.ToDecimal(row["FTAXPRICE"]);
+                    decimal price = row["FPRICE"] == DBNull.Value ? 0m : Convert.ToDecimal(row["FPRICE"]);
 
                     // 将每条数据库记录与所有请求进行匹配
                     // 由于结果已按日期倒序，第一个匹配到的就是最新的价格
