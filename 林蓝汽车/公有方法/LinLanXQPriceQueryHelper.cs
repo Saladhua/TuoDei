@@ -25,7 +25,7 @@ namespace kingdee.CustLI.Business.PlugIn
             public long CustomerId;       // 客户内码，匹配 T_SAL_ORDER.FCUSTID
             public long SettleCurrId;     // 结算币别内码，匹配 T_SAL_ORDER.FSETTLECURRID
             public long MaterialId;       // 物料内码，匹配 T_SAL_ORDERENTRY.FMATERIALID
-            public string DrawingNo;      // 产品图号（销售报价单使用），匹配 T_SAL_ORDERENTRY.F_QSGA_Text_33z
+            public string DrawingNo;      // 产品图号（销售报价单使用），匹配 T_SAL_ORDERENTRY.F_QSGA_TEXT_33Z
             public decimal TaxRate;       // 税率，匹配 T_SAL_ORDERENTRY.FTAXRATE
             public long CountryRangeId;   // 国别范围（销售报价单使用），辅助报价单取价过滤
             public string PriceType;      // 价格类型（销售报价单使用），辅助报价单取价过滤
@@ -68,15 +68,17 @@ namespace kingdee.CustLI.Business.PlugIn
             sql.AppendLine("    a.FID,");
             sql.AppendLine("    e.FENTRYID,");
             sql.AppendLine("    e.FMATERIALID,");
-            sql.AppendLine("    e.FTAXPRICE,");
-            sql.AppendLine("    e.FPRICE,");
-            sql.AppendLine("    e.FTAXRATE,");
-            sql.AppendLine("    a.FSETTLECURRID,");
+            sql.AppendLine("    f.FTAXPRICE,");
+            sql.AppendLine("    f.FPRICE,");
+            sql.AppendLine("    f.FTAXRATE,");
+            sql.AppendLine("    fin.FSETTLECURRID,");
             sql.AppendLine("    a.FBILLNO,");
             sql.AppendLine("    a.FDATE,");
             sql.AppendLine("    e.FSEQ");
             sql.AppendLine("FROM T_SAL_ORDER a");
             sql.AppendLine("JOIN T_SAL_ORDERENTRY e ON a.FID = e.FID");
+            sql.AppendLine("JOIN T_SAL_ORDERENTRY_F f ON e.FENTRYID = f.FENTRYID");
+            sql.AppendLine("JOIN T_SAL_ORDERFIN fin ON a.FID = fin.FID");
             sql.AppendLine("WHERE a.FDOCUMENTSTATUS = 'C'");  // C=已审核
             sql.AppendLine("AND (");
 
@@ -87,16 +89,16 @@ namespace kingdee.CustLI.Business.PlugIn
                 if (i > 0) sql.AppendLine("OR");
 
                 sql.AppendLine("    (a.FCUSTID = " + req.CustomerId.ToString());
-                sql.AppendLine("     AND a.FSETTLECURRID = " + req.SettleCurrId.ToString());
+                sql.AppendLine("     AND fin.FSETTLECURRID = " + req.SettleCurrId.ToString());
                 sql.AppendLine("     AND e.FMATERIALID = " + req.MaterialId.ToString());
                 // 税率格式化为 6 位小数确保与数据库中存储精度一致，防止浮点数截断导致匹配不上
-                sql.AppendLine("     AND e.FTAXRATE = " + req.TaxRate.ToString("F6"));
+                sql.AppendLine("     AND f.FTAXRATE = " + req.TaxRate.ToString("F6"));
 
                 // 图号为可选项：销售订单通常不含图号，销售报价单可能包含
                 if (!string.IsNullOrEmpty(req.DrawingNo))
                 {
-                    // 产品图号存于 F_QSGA_Text_33z 字段，转义单引号防 SQL 注入
-                    sql.AppendLine("     AND e.F_QSGA_Text_33z = '" + req.DrawingNo.Replace("'", "''") + "'");
+                    // 产品图号存于 F_QSGA_TEXT_33Z 字段，转义单引号防 SQL 注入
+                    sql.AppendLine("     AND e.F_QSGA_TEXT_33Z = '" + req.DrawingNo.Replace("'", "''") + "'");
                 }
 
                 sql.AppendLine("    )");
@@ -110,13 +112,13 @@ namespace kingdee.CustLI.Business.PlugIn
             switch (priceType)
             {
                 case "2":
-                    sql.AppendLine("ORDER BY e.FTAXPRICE ASC, a.FDATE DESC");
+                    sql.AppendLine("ORDER BY f.FTAXPRICE ASC, a.FDATE DESC");
                     break;
                 case "3":
-                    sql.AppendLine("ORDER BY e.FTAXPRICE DESC, a.FDATE DESC");
+                    sql.AppendLine("ORDER BY f.FTAXPRICE DESC, a.FDATE DESC");
                     break;
                 default:
-                    sql.AppendLine("ORDER BY a.FDATE DESC, a.FBILLNO DESC");
+                    sql.AppendLine("ORDER BY a.FApproveDate DESC, a.FBILLNO DESC");
                     break;
             }
 
