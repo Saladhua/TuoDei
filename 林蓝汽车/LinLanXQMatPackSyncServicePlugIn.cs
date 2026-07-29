@@ -61,8 +61,8 @@ namespace kingdee.CustLI.Business.PlugIn
                 @"SELECT F_CustLI_PackName, F_CustLI_PackLength, F_CustLI_PackWidth,
                          F_CustLI_PackHeight, F_CustLI_PackWeight, F_CustLI_PackDesc
                   FROM QSGA_t_Cust_Entry100006
-                  WHERE FID = {0}
-                  ORDER BY FSEQ",
+                  WHERE FMATERIALID = {0}
+                  ORDER BY FEntryID",
                 materialId);
 
             var dbService = ServiceFactory.GetDBService(ctx);
