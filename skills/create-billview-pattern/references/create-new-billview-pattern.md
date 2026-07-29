@@ -1,4 +1,9 @@
-﻿using System;
+# CreateNewBillView 完整参考代码
+
+## 完整实现
+
+```csharp
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using Kingdee.BOS;
@@ -18,8 +23,8 @@ using Kingdee.BOS.Web.Bill;
 
 namespace kingdee.CustLI.Business.PlugIn
 {
-    [System.ComponentModel.Description("林蓝汽车-物料审核同步包装方式到预置基础资料")]
-    public class LinLanXQMatPackSyncServicePlugIn : AbstractOperationServicePlugIn
+    [System.ComponentModel.Description("示例")]
+    public class ExampleServicePlugIn : AbstractOperationServicePlugIn
     {
         public override void OnPreparePropertys(PreparePropertysEventArgs e)
         {
@@ -40,68 +45,29 @@ namespace kingdee.CustLI.Business.PlugIn
                 if (materialId <= 0) continue;
 
                 string materialName = ObjectToString(billObj["Name"]);
-                DynamicObjectCollection packRows = QueryMaterialPackEntries(this.Context, materialId);
 
-                SaveToPreBaseDataOne(this.Context, materialId, materialName, packRows);
+                SaveToTargetForm(this.Context, materialId, materialName);
             }
         }
 
-        private DynamicObjectCollection QueryMaterialPackEntries(Context ctx, long materialId)
+        private void SaveToTargetForm(Context ctx, long materialId, string materialName)
         {
-            string sql = string.Format(
-                @"SELECT F_CustLI_PackName, F_CustLI_PackLength, F_CustLI_PackWidth,
-                          F_CustLI_PackHeight, F_CustLI_PackWeight, F_CustLI_PackDesc
-                   FROM QSGA_t_Cust_Entry100006
-                   WHERE FMATERIALID = {0}
-                   ORDER BY FEntryID",
-                materialId);
+            bool isNewRecord = true;
 
-            var dbService = ServiceFactory.GetDBService(ctx);
-            return dbService.ExecuteDynamicObject(ctx, sql);
-        }
-
-        private void SaveToPreBaseDataOne(Context ctx, long materialId, string materialName, DynamicObjectCollection packRows)
-        {
-            string existSql = string.Format(
-                "SELECT FID FROM T_BAS_PREBDONE WHERE F_CUSTLI_FMASTERID = {0}", materialId);
-            var dbService = ServiceFactory.GetDBService(ctx);
-            DynamicObjectCollection existRows = dbService.ExecuteDynamicObject(ctx, existSql);
-
-            long? existingFid = null;
-            if (existRows != null && existRows.Count > 0)
-            {
-                existingFid = Convert.ToInt64(existRows[0]["FID"]);
-            }
-
-            bool isNewRecord = !existingFid.HasValue;
-
-            IBillView view = CreateNewBillView(ctx, "BAS_PreBaseDataOne", existingFid);
+            IBillView view = CreateNewBillView(ctx, "目标表单ID", null);
 
             DynamicFormViewPlugInProxy proxy = view.GetService<DynamicFormViewPlugInProxy>();
             proxy.FireOnLoad();
 
+            // 基础资料字段：SetItemValueByID + InvokeFieldUpdateService
             view.Model.SetItemValueByID("F_CUSTLI_FMASTERID", materialId.ToString(), 0);
             view.InvokeFieldUpdateService("F_CUSTLI_FMASTERID", 0);
+
+            // 文本字段：直接写 DataObject，不调用 InvokeFieldUpdateService
+            // 位置必须在所有 InvokeFieldUpdateService 之后
             view.Model.DataObject["Name"] = materialName;
 
-            DynamicObjectCollection entryCol = view.Model.DataObject["QSGA_Cust_Entry100009"] as DynamicObjectCollection;
-            entryCol.Clear();
-
-            if (packRows != null && packRows.Count > 0)
-            {
-                foreach (DynamicObject row in packRows)
-                {
-                    DynamicObject entry = entryCol.DynamicCollectionItemPropertyType.CreateInstance() as DynamicObject;
-                    entry["F_CustLI_PackName"] = ObjectToString(row["F_CustLI_PackName"]);
-                    entry["F_CustLI_PackLength"] = ObjectToDecimal(row["F_CustLI_PackLength"]);
-                    entry["F_CustLI_PackWidth"] = ObjectToDecimal(row["F_CustLI_PackWidth"]);
-                    entry["F_CustLI_PackHeight"] = ObjectToDecimal(row["F_CustLI_PackHeight"]);
-                    entry["F_CustLI_PackWeight"] = ObjectToDecimal(row["F_CustLI_PackWeight"]);
-                    entry["F_CustLI_PackDesc"] = ObjectToString(row["F_CustLI_PackDesc"]);
-                    entryCol.Add(entry);
-                }
-            }
-
+            // Save
             IOperationResult saveResult = BusinessDataServiceHelper.Save(
                 ctx, view.BillBusinessInfo, view.Model.DataObject,
                 OperateOption.Create(), "Save");
@@ -110,9 +76,10 @@ namespace kingdee.CustLI.Business.PlugIn
             {
                 var errMsgs = saveResult.ValidationErrors.Select(x => x.Message);
                 throw new Exception(
-                    string.Format("BAS_PreBaseDataOne 保存失败：{0}", string.Join(",", errMsgs)));
+                    string.Format("保存失败：{0}", string.Join(",", errMsgs)));
             }
 
+            // Submit + Audit（仅新增）
             if (isNewRecord)
             {
                 long savedId = Convert.ToInt64(view.Model.DataObject["Id"]);
@@ -125,7 +92,7 @@ namespace kingdee.CustLI.Business.PlugIn
                 {
                     var errMsgs = submitResult.ValidationErrors.Select(x => x.Message);
                     throw new Exception(
-                        string.Format("BAS_PreBaseDataOne 提交失败：{0}", string.Join(",", errMsgs)));
+                        string.Format("提交失败：{0}", string.Join(",", errMsgs)));
                 }
 
                 IOperationResult auditResult = BusinessDataServiceHelper.Audit(
@@ -135,7 +102,7 @@ namespace kingdee.CustLI.Business.PlugIn
                 {
                     var errMsgs = auditResult.ValidationErrors.Select(x => x.Message);
                     throw new Exception(
-                        string.Format("BAS_PreBaseDataOne 审核失败：{0}", string.Join(",", errMsgs)));
+                        string.Format("审核失败：{0}", string.Join(",", errMsgs)));
                 }
             }
         }
@@ -144,12 +111,9 @@ namespace kingdee.CustLI.Business.PlugIn
         {
             FormMetadata meta = MetaDataServiceHelper.Load(ctx, formId) as FormMetadata;
             if (meta == null)
-            {
                 throw new Exception(string.Format("未能加载单据元数据，FormId={0}", formId));
-            }
 
-            BusinessInfo businessInfo = meta.BusinessInfo;
-            var form = businessInfo.GetForm();
+            var form = meta.BusinessInfo.GetForm();
 
             IResourceServiceProvider formServiceProvider = form.GetFormServiceProvider(true);
             IDynamicFormViewService billViewService =
@@ -183,7 +147,6 @@ namespace kingdee.CustLI.Business.PlugIn
             billViewService.Initialize(openParam, formServiceProvider);
 
             IBillView view = (IBillView)billViewService;
-
             ((BillView)view).LoadData();
 
             return view;
@@ -204,3 +167,29 @@ namespace kingdee.CustLI.Business.PlugIn
         }
     }
 }
+```
+
+## 关键调试记录
+
+### 2026-07-29 事故复盘
+
+**问题**：`BAS_PreBaseDataOne` 保存失败，`Name` 字段必填。
+
+**根因1**：文本字段调用了 `InvokeFieldUpdateService`。
+```
+view.Model.SetValue("Name", materialName, 0);
+view.InvokeFieldUpdateService("Name", 0);         // ← 此行为将 Name 重置为空
+```
+
+**根因2**：设值顺序错误。`InvokeFieldUpdateService` 触发的联动覆盖了之前设的 Name 值。
+```
+// ❌ Name 设在前，联动在后，联动把 Name 覆盖
+SetValue("Name", ...) → InvokeFieldUpdateService("关联字段", ...)
+
+// ✅ 联动在前，Name 在后，联动完再设 Name 不会被覆盖
+InvokeFieldUpdateService("关联字段", ...) → SetValue / DataObject["Name"]
+```
+
+**根因3**：`CreateNewModelData()` 对某些表单不适用，统一用 `LoadData()` 更可靠。
+
+**命名空间陷阱**：`OperateOption` 在 `Kingdee.BOS.Orm` 而非 `Kingdee.BOS.Core.DynamicForm.Operation`，缺少 `using Kingdee.BOS.Orm;` 会导致 CS0103 编译错误。
