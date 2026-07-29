@@ -69,7 +69,7 @@ namespace kingdee.CustLI.Business.PlugIn
         }
 
         /// <summary>
-        /// 保存数据到 BAS_PreBaseDataOne（通过 BusinessDataServiceHelper 触发表单编号与默认值初始化）
+        /// 保存数据到 BAS_PreBaseDataOne（通过 ISaveService 完整流程触发单据编号生成与默认值初始化）
         /// </summary>
         private void SaveToPreBaseDataOne(Context ctx, long materialId, string materialName, DynamicObjectCollection packRows)
         {
@@ -129,8 +129,9 @@ namespace kingdee.CustLI.Business.PlugIn
                 }
             }
 
-            // 通过 BusinessDataServiceHelper 保存，触发表单编号生成与默认值初始化
-            BusinessDataServiceHelper.Save(ctx, meta.BusinessInfo, new DynamicObject[] { bill }, null, "Save");
+            // 通过 ISaveService 完整流程保存，触发表单编号生成与默认值初始化
+            ISaveService saveService = ServiceHelper.GetService<ISaveService>();
+            saveService.Save(ctx, meta.BusinessInfo, new DynamicObject[] { bill });
         }
 
         private string ObjectToString(object value)
