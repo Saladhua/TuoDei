@@ -1,9 +1,8 @@
 using System;
-using System.Data;
 using Kingdee.BOS;
 using Kingdee.BOS.App;
-using Kingdee.BOS.App.Data;
 using Kingdee.BOS.Contracts;
+using Kingdee.BOS.Core;
 using Kingdee.BOS.Core.DynamicForm.PlugIn;
 using Kingdee.BOS.Core.DynamicForm.PlugIn.Args;
 using Kingdee.BOS.Core.Metadata;
@@ -27,7 +26,7 @@ namespace kingdee.CustLI.Business.PlugIn
         public override void OnPreparePropertys(PreparePropertysEventArgs e)
         {
             base.OnPreparePropertys(e);
-            e.FieldKeys.Add("FMATERIALID");
+            e.FieldKeys.Add("FNAME");
         }
 
         /// <summary>
@@ -37,39 +36,26 @@ namespace kingdee.CustLI.Business.PlugIn
         {
             base.AfterExecuteOperationTransaction(e);
 
-            if (e.DataEntitys == null || e.DataEntitys.Length == 0) return;
-
             // 遍历本次操作的每个已审核物料
-            foreach (DynamicObject billObj in e.DataEntitys)
+            foreach (ExtendedDataEntity data in e.SelectedRows)
             {
+                DynamicObject billObj = data.DataEntity;
                 if (billObj == null) continue;
 
-                long materialId = 0;
-                string materialName = "";
-                // 取物料关联对象，获取物料内码和名称
-                if (billObj["FMATERIALID"] != null)
-                {
-                    DynamicObject matObj = billObj["FMATERIALID"] as DynamicObject;
-                    if (matObj != null)
-                    {
-                        materialId = Convert.ToInt64(matObj["Id"]);
-                        materialName = ObjectToString(matObj["Name"]);
-                    }
-                }
-
-                // 物料内码无效则跳过
+                long materialId = Convert.ToInt64(billObj["Id"]);
                 if (materialId <= 0) continue;
 
-                DataSet packDs = QueryMaterialPackEntries(this.Context, materialId);
+                string materialName = ObjectToString(billObj["NAME"]);
+                DynamicObjectCollection packRows = QueryMaterialPackEntries(this.Context, materialId);
 
-                SaveToPreBaseDataOne(this.Context, materialId, materialName, packDs);
+                SaveToPreBaseDataOne(this.Context, materialId, materialName, packRows);
             }
         }
 
         /// <summary>
         /// 查询物料包装方式页签数据
         /// </summary>
-        private DataSet QueryMaterialPackEntries(Context ctx, long materialId)
+        private DynamicObjectCollection QueryMaterialPackEntries(Context ctx, long materialId)
         {
             string sql = string.Format(
                 @"SELECT F_CustLI_PackName, F_CustLI_PackLength, F_CustLI_PackWidth,
@@ -79,14 +65,15 @@ namespace kingdee.CustLI.Business.PlugIn
                   ORDER BY FSEQ",
                 materialId);
 
-            return DBServiceHelper.ExecuteDataSet(ctx, sql);
+            var dbService = ServiceFactory.GetDBService(ctx);
+            return dbService.ExecuteDynamicObject(ctx, sql);
         }
 
         /// <summary>
         /// 通过 BOS 标准 ISaveService 保存数据包到 BAS_PreBaseDataOne
         /// 已存在记录则设 Id 实现覆盖（UPDATE），不存在则 INSERT
         /// </summary>
-        private void SaveToPreBaseDataOne(Context ctx, long materialId, string materialName, DataSet packDs)
+        private void SaveToPreBaseDataOne(Context ctx, long materialId, string materialName, DynamicObjectCollection packRows)
         {
             FormMetadata meta = MetaDataServiceHelper.Load(ctx, "BAS_PreBaseDataOne") as FormMetadata;
             if (meta == null) return;
@@ -98,14 +85,15 @@ namespace kingdee.CustLI.Business.PlugIn
             // 查询 BAS_PreBaseDataOne 是否已有该物料的记录
             string existSql = string.Format(
                 "SELECT FID FROM BAS_PreBaseDataOne WHERE F_CUSTLI_FMASTERID = {0}", materialId);
-            DataSet existDs = DBServiceHelper.ExecuteDataSet(ctx, existSql);
+            var dbService = ServiceFactory.GetDBService(ctx);
+            DynamicObjectCollection existRows = dbService.ExecuteDynamicObject(ctx, existSql);
 
             DynamicObject headObj = new DynamicObject(headType);
 
             // 已有记录 → 设 Id 使 Save 变 UPDATE（覆盖）
-            if (existDs != null && existDs.Tables.Count > 0 && existDs.Tables[0].Rows.Count > 0)
+            if (existRows != null && existRows.Count > 0)
             {
-                headObj["Id"] = Convert.ToInt64(existDs.Tables[0].Rows[0]["FID"]);
+                headObj["Id"] = Convert.ToInt64(existRows[0]["FID"]);
             }
             // 无记录 → 不设 Id，Save 自动 INSERT
 
@@ -115,9 +103,9 @@ namespace kingdee.CustLI.Business.PlugIn
             DynamicObjectCollection entryCollection = new DynamicObjectCollection(entryItemType, headObj);
 
             // 遍历物料包装方式页签名行，构建子表条目
-            if (packDs != null && packDs.Tables.Count > 0 && packDs.Tables[0].Rows.Count > 0)
+            if (packRows != null && packRows.Count > 0)
             {
-                foreach (DataRow row in packDs.Tables[0].Rows)
+                foreach (DynamicObject row in packRows)
                 {
                     DynamicObject entryObj = new DynamicObject(entryItemType);
                     entryObj["F_CustLI_PackName"] = ObjectToString(row["F_CustLI_PackName"]);
