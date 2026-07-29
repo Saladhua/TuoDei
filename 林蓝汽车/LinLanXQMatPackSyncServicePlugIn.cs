@@ -105,25 +105,22 @@ namespace kingdee.CustLI.Business.PlugIn
             view.Model.SetValue("F_CUSTLI_FMASTERID", matRef, 0);
             view.Model.SetValue("Name", materialName, 0);
 
-            // 清空已有分录并重新添加包装方式数据
-            int entryRowCount = view.Model.GetEntryRowCount("QSGA_Cust_Entry100009");
-            for (int i = entryRowCount - 1; i >= 0; i--)
-            {
-                view.Model.DeleteEntryRow("QSGA_Cust_Entry100009", i);
-            }
+// 通过 Model.DataObject 取子表集合引用，清空后重新填充
+            DynamicObjectCollection entryCol = view.Model.DataObject["QSGA_Cust_Entry100009"] as DynamicObjectCollection;
+            entryCol.Clear();
 
             if (packRows != null && packRows.Count > 0)
             {
                 foreach (DynamicObject row in packRows)
                 {
-                    view.Model.CreateNewEntryRow("QSGA_Cust_Entry100009");
-                    int newRowIdx = view.Model.GetEntryRowCount("QSGA_Cust_Entry100009") - 1;
-                    view.Model.SetValue("F_CustLI_PackName", ObjectToString(row["F_CustLI_PackName"]), newRowIdx);
-                    view.Model.SetValue("F_CustLI_PackLength", ObjectToDecimal(row["F_CustLI_PackLength"]), newRowIdx);
-                    view.Model.SetValue("F_CustLI_PackWidth", ObjectToDecimal(row["F_CustLI_PackWidth"]), newRowIdx);
-                    view.Model.SetValue("F_CustLI_PackHeight", ObjectToDecimal(row["F_CustLI_PackHeight"]), newRowIdx);
-                    view.Model.SetValue("F_CustLI_PackWeight", ObjectToDecimal(row["F_CustLI_PackWeight"]), newRowIdx);
-                    view.Model.SetValue("F_CustLI_PackDesc", ObjectToString(row["F_CustLI_PackDesc"]), newRowIdx);
+                    DynamicObject entry = entryCol.DynamicCollectionItemPropertyType.CreateInstance() as DynamicObject;
+                    entry["F_CustLI_PackName"] = ObjectToString(row["F_CustLI_PackName"]);
+                    entry["F_CustLI_PackLength"] = ObjectToDecimal(row["F_CustLI_PackLength"]);
+                    entry["F_CustLI_PackWidth"] = ObjectToDecimal(row["F_CustLI_PackWidth"]);
+                    entry["F_CustLI_PackHeight"] = ObjectToDecimal(row["F_CustLI_PackHeight"]);
+                    entry["F_CustLI_PackWeight"] = ObjectToDecimal(row["F_CustLI_PackWeight"]);
+                    entry["F_CustLI_PackDesc"] = ObjectToString(row["F_CustLI_PackDesc"]);
+                    entryCol.Add(entry);
                 }
             }
 
