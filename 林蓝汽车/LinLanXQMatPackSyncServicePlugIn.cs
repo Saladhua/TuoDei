@@ -84,7 +84,7 @@ namespace kingdee.CustLI.Business.PlugIn
 
             // 查询 BAS_PREBDONE 是否已有该物料的记录
             string existSql = string.Format(
-                "SELECT FID FROM BAS_PREBDONE WHERE F_CUSTLI_FMASTERID = {0}", materialId);
+                "SELECT FID FROM T_BAS_PREBDONE WHERE F_CUSTLI_FMASTERID = {0}", materialId);
             var dbService = ServiceFactory.GetDBService(ctx);
             DynamicObjectCollection existRows = dbService.ExecuteDynamicObject(ctx, existSql);
 
