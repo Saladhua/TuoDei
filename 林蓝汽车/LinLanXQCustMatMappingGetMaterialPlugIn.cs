@@ -22,15 +22,15 @@ namespace kingdee.CustLI.Business.PlugIn
     public class LinLanXQCustMatMappingGetMaterialPlugIn : AbstractBillPlugIn
     {
         /// <summary>
-        /// 按钮点击事件处理：触发图号→物料批量匹配逻辑
+        /// 明细工具栏按钮点击事件处理：触发图号→物料批量匹配逻辑
         /// </summary>
-        /// <param name="e">按钮事件参数，包含按钮标识Key</param>
-        public override void ButtonClick(ButtonClickEventArgs e)
+        /// <param name="e">按钮事件参数，包含按钮标识BarItemKey</param>
+        public override void EntryBarItemClick(BarItemClickEventArgs e)
         {
-            base.ButtonClick(e);
+            base.EntryBarItemClick(e);
 
             // 只处理【根据图号获取物料】按钮，按钮标识在BOS元数据中注册
-            if (e.Key != "F_CustLI_GetMatByDrawing") return;
+            if (!e.BarItemKey.Equals("F_CustLI_GetMatByDrawing", StringComparison.OrdinalIgnoreCase)) return;
 
             DynamicObject billObj = this.View.Model.DataObject;
             if (billObj == null) return;
@@ -116,13 +116,13 @@ namespace kingdee.CustLI.Business.PlugIn
 
             if (drawingNoList == null || drawingNoList.Count == 0) return result;
 
-            // 构造 IN 查询：物料编码(FNUMBER)作为图号使用，在物料主表(T_BD_MATERIAL)中查找
+            // 构造 IN 查询：产品图号(F_QSGA_TEXT_33Z)作为图号使用，在物料主表(T_BD_MATERIAL)中查找
             StringBuilder sql = new StringBuilder();
             sql.AppendLine("SELECT");
             sql.AppendLine("    a1.FMATERIALID,");
-            sql.AppendLine("    a1.FNUMBER AS FDRAWINGNO");
+            sql.AppendLine("    a1.F_QSGA_TEXT_33Z AS FDRAWINGNO");
             sql.AppendLine("FROM T_BD_MATERIAL a1");
-            sql.AppendLine("WHERE a1.FNUMBER IN (");
+            sql.AppendLine("WHERE a1.F_QSGA_TEXT_33Z IN (");
 
             for (int i = 0; i < drawingNoList.Count; i++)
             {
