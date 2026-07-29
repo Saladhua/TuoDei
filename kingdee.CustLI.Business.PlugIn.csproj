@@ -201,6 +201,7 @@
     <Compile Include="林蓝汽车\LinLanXQSalOrderGetPricePlugIn.cs" />
     <Compile Include="林蓝汽车\LinLanXQCustMatMappingGetMaterialPlugIn.cs" />
     <Compile Include="林蓝汽车\LinLanXQBomPackMethodValidator.cs" />
+    <Compile Include="林蓝汽车\LinLanXQMatPackSyncServicePlugIn.cs" />
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
 </Project>
