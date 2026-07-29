@@ -1,13 +1,17 @@
-using System;
+﻿using System;
 using Kingdee.BOS;
 using Kingdee.BOS.App;
 using Kingdee.BOS.Contracts;
 using Kingdee.BOS.Core;
+using Kingdee.BOS.Core.Bill;
+using Kingdee.BOS.Core.DynamicForm;
+using Kingdee.BOS.Core.DynamicForm.Operation;
 using Kingdee.BOS.Core.DynamicForm.PlugIn;
 using Kingdee.BOS.Core.DynamicForm.PlugIn.Args;
 using Kingdee.BOS.Core.Metadata;
 using Kingdee.BOS.Orm.DataEntity;
 using Kingdee.BOS.ServiceHelper;
+using Kingdee.BOS.Web.Bill;
 
 namespace kingdee.CustLI.Business.PlugIn
 {
@@ -58,10 +62,10 @@ namespace kingdee.CustLI.Business.PlugIn
         {
             string sql = string.Format(
                 @"SELECT F_CustLI_PackName, F_CustLI_PackLength, F_CustLI_PackWidth,
-                         F_CustLI_PackHeight, F_CustLI_PackWeight, F_CustLI_PackDesc
-                  FROM QSGA_t_Cust_Entry100006
-                  WHERE FMATERIALID = {0}
-                  ORDER BY FEntryID",
+                          F_CustLI_PackHeight, F_CustLI_PackWeight, F_CustLI_PackDesc
+                   FROM QSGA_t_Cust_Entry100006
+                   WHERE FMATERIALID = {0}
+                   ORDER BY FEntryID",
                 materialId);
 
             var dbService = ServiceFactory.GetDBService(ctx);
@@ -69,69 +73,97 @@ namespace kingdee.CustLI.Business.PlugIn
         }
 
         /// <summary>
-        /// 保存数据到 BAS_PreBaseDataOne（通过 ISaveService 完整流程触发单据编号生成与默认值初始化）
+        /// 保存数据到 BAS_PreBaseDataOne（通过 CreateBillView + Model 流程触发单据编号生成与默认值初始化）
         /// </summary>
         private void SaveToPreBaseDataOne(Context ctx, long materialId, string materialName, DynamicObjectCollection packRows)
         {
-            FormMetadata meta = MetaDataServiceHelper.Load(ctx, "BAS_PreBaseDataOne") as FormMetadata;
-            if (meta == null) return;
-
-            var billType = meta.BusinessInfo.GetDynamicObjectType();
-
-            // 获取物料引用类型
-            FormMetadata matMeta = MetaDataServiceHelper.Load(ctx, "BD_MATERIAL") as FormMetadata;
-            if (matMeta == null) return;
-            var matType = matMeta.BusinessInfo.GetDynamicObjectType();
-
             // 查询 BAS_PreBaseDataOne 是否已有该物料的记录
             string existSql = string.Format(
                 "SELECT FID FROM T_BAS_PREBDONE WHERE F_CUSTLI_FMASTERID = {0}", materialId);
             var dbService = ServiceFactory.GetDBService(ctx);
             DynamicObjectCollection existRows = dbService.ExecuteDynamicObject(ctx, existSql);
 
-            DynamicObject bill;
+            long? existingFid = null;
             if (existRows != null && existRows.Count > 0)
             {
-                bill = BusinessDataServiceHelper.LoadSingle(ctx,
-                    Convert.ToInt64(existRows[0]["FID"]),
-                    billType) as DynamicObject;
-            }
-            else
-            {
-                bill = billType.CreateInstance() as DynamicObject;
+                existingFid = Convert.ToInt64(existRows[0]["FID"]);
             }
 
-            // 表头赋值（通过LoadSingle获取完整实体，并设_Id以便外键正确解析）
+            // 通过 CreateBillView 创建单据视图
+            BillView view = CreateBillView(ctx, "BAS_PreBaseDataOne", null, existingFid);
+
+            // 加载物料引用类型
+            FormMetadata matMeta = MetaDataServiceHelper.Load(ctx, "BD_MATERIAL") as FormMetadata;
+            if (matMeta == null) return;
+            var matType = matMeta.BusinessInfo.GetDynamicObjectType();
+
+            // 取物料实体用于赋值
             DynamicObject matRef = BusinessDataServiceHelper.LoadSingle(ctx, materialId, matType) as DynamicObject;
-            if (matRef != null)
-            {
-                bill["F_CUSTLI_FMASTERID"] = matRef;
-                bill["F_CUSTLI_FMASTERID_Id"] = materialId;
-            }
-            bill["Name"] = materialName;
+            if (matRef == null) return;
 
-            // 取单据体集合引用（不直接赋值，绕过只读检查）
-            DynamicObjectCollection entryCol = bill["QSGA_Cust_Entry100009"] as DynamicObjectCollection;
-            entryCol.Clear();
+            // 表头赋值（通过 Model API）
+            view.Model.SetValue("F_CUSTLI_FMASTERID", matRef, 0);
+            view.Model.SetValue("Name", materialName, 0);
+
+            // 清空已有分录并重新添加包装方式数据
+            int entryRowCount = view.Model.GetEntryRowCount("QSGA_Cust_Entry100009");
+            for (int i = entryRowCount - 1; i >= 0; i--)
+            {
+                view.Model.DeleteEntryRow("QSGA_Cust_Entry100009", i);
+            }
 
             if (packRows != null && packRows.Count > 0)
             {
                 foreach (DynamicObject row in packRows)
                 {
-                    DynamicObject entry = entryCol.DynamicCollectionItemPropertyType.CreateInstance() as DynamicObject;
-                    entry["F_CustLI_PackName"] = ObjectToString(row["F_CustLI_PackName"]);
-                    entry["F_CustLI_PackLength"] = ObjectToDecimal(row["F_CustLI_PackLength"]);
-                    entry["F_CustLI_PackWidth"] = ObjectToDecimal(row["F_CustLI_PackWidth"]);
-                    entry["F_CustLI_PackHeight"] = ObjectToDecimal(row["F_CustLI_PackHeight"]);
-                    entry["F_CustLI_PackWeight"] = ObjectToDecimal(row["F_CustLI_PackWeight"]);
-                    entry["F_CustLI_PackDesc"] = ObjectToString(row["F_CustLI_PackDesc"]);
-                    entryCol.Add(entry);
+                    view.Model.CreateNewEntryRow("QSGA_Cust_Entry100009");
+                    int newRowIdx = view.Model.GetEntryRowCount("QSGA_Cust_Entry100009") - 1;
+                    view.Model.SetValue("F_CustLI_PackName", ObjectToString(row["F_CustLI_PackName"]), newRowIdx);
+                    view.Model.SetValue("F_CustLI_PackLength", ObjectToDecimal(row["F_CustLI_PackLength"]), newRowIdx);
+                    view.Model.SetValue("F_CustLI_PackWidth", ObjectToDecimal(row["F_CustLI_PackWidth"]), newRowIdx);
+                    view.Model.SetValue("F_CustLI_PackHeight", ObjectToDecimal(row["F_CustLI_PackHeight"]), newRowIdx);
+                    view.Model.SetValue("F_CustLI_PackWeight", ObjectToDecimal(row["F_CustLI_PackWeight"]), newRowIdx);
+                    view.Model.SetValue("F_CustLI_PackDesc", ObjectToString(row["F_CustLI_PackDesc"]), newRowIdx);
                 }
             }
 
-            // 通过 ISaveService 完整流程保存，触发表单编号生成与默认值初始化
-            ISaveService saveService = ServiceHelper.GetService<ISaveService>();
-            saveService.Save(ctx, meta.BusinessInfo, new DynamicObject[] { bill });
+            // 通过 Model 保存单据
+            view.Model.Save();
+        }
+
+        /// <summary>
+        /// 创建单据视图（供 SaveToPreBaseDataOne 使用的工具方法）
+        /// 通过单据元数据初始化 BillView，加载数据后可通过 Model API 读写并保存
+        /// </summary>
+        private static BillView CreateBillView(Context ctx, string formId, string layoutId = null, object pkId = null)
+        {
+            var meta = (FormMetadata)MetaDataServiceHelper.Load(ctx, formId);
+            var form = meta.BusinessInfo.GetForm();
+
+            var param = new BillOpenParameter(formId, layoutId);
+            param.Context = ctx;
+            param.FormMetaData = meta;
+            if (pkId != null && !string.IsNullOrWhiteSpace(pkId.ToString()))
+            {
+                param.Status = OperationStatus.EDIT;
+                param.InitStatus = OperationStatus.EDIT;
+                param.PkValue = pkId;
+            }
+            else
+            {
+                param.Status = OperationStatus.ADDNEW;
+                param.InitStatus = OperationStatus.ADDNEW;
+            }
+
+            param.SetCustomParameter("formID", form.Id);
+            param.SetCustomParameter("PlugIns", form.CreateFormPlugIns());
+            param.SetCustomParameter("ShowConfirmDialogWhenChangeOrg", false);
+            param.NetCtrlDisable = true;
+            var provider = form.GetFormServiceProvider();
+            var billview = (BillView)provider.GetService(typeof(IDynamicFormView));
+            billview.Initialize(param, provider);
+            billview.LoadData();
+            return billview;
         }
 
         private string ObjectToString(object value)
