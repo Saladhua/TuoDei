@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Linq;
 using Kingdee.BOS;
 using Kingdee.BOS.App;
 using Kingdee.BOS.Contracts;
@@ -73,7 +74,7 @@ namespace kingdee.CustLI.Business.PlugIn
         }
 
         /// <summary>
-        /// 保存数据到 BAS_PreBaseDataOne（通过 CreateBillView + Model 流程触发单据编号生成与默认值初始化）
+        /// 保存数据到 BAS_PreBaseDataOne（通过 CreateBillView + BusinessDataServiceHelper 完整流程）
         /// </summary>
         private void SaveToPreBaseDataOne(Context ctx, long materialId, string materialName, DynamicObjectCollection packRows)
         {
@@ -92,20 +93,17 @@ namespace kingdee.CustLI.Business.PlugIn
             // 通过 CreateBillView 创建单据视图
             BillView view = CreateBillView(ctx, "BAS_PreBaseDataOne", null, existingFid);
 
-            // 加载物料引用类型
-            FormMetadata matMeta = MetaDataServiceHelper.Load(ctx, "BD_MATERIAL") as FormMetadata;
-            if (matMeta == null) return;
-            var matType = matMeta.BusinessInfo.GetDynamicObjectType();
+            // 触发 OnLoad 事件（填充默认值的关键步骤）
+            DynamicFormViewPlugInProxy proxy = view.GetService<DynamicFormViewPlugInProxy>();
+            proxy.FireOnLoad();
 
-            // 取物料实体用于赋值
-            DynamicObject matRef = BusinessDataServiceHelper.LoadSingle(ctx, materialId, matType) as DynamicObject;
-            if (matRef == null) return;
-
-            // 表头赋值（通过 Model API）
-            view.Model.SetValue("F_CUSTLI_FMASTERID", matRef, 0);
+            // 引用字段用 SetItemValueByID（传物料内码字符串），普通字段用 SetValue
+            view.Model.SetItemValueByID("F_CUSTLI_FMASTERID", materialId.ToString(), 0);
             view.Model.SetValue("Name", materialName, 0);
+            view.InvokeFieldUpdateService("F_CUSTLI_FMASTERID", 0);
+            view.InvokeFieldUpdateService("Name", 0);
 
-// 通过 Model.DataObject 取子表集合引用，清空后重新填充
+            // 通过 Model.DataObject 取子表集合引用，清空后重新填充
             DynamicObjectCollection entryCol = view.Model.DataObject["QSGA_Cust_Entry100009"] as DynamicObjectCollection;
             entryCol.Clear();
 
