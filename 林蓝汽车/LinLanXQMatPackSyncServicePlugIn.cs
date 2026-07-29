@@ -14,7 +14,7 @@ namespace kingdee.CustLI.Business.PlugIn
     /// <summary>
     /// 林蓝汽车-物料审核同步包装方式到预置基础资料
     /// 物料审核通过后，将物料包装方式页签（QSGA_t_Cust_Entry100006）的数据
-    /// 覆盖同步到预置基础资料 BAS_PreBaseDataOne（子单据体 QSGA_Cust_Entry100009）
+    /// 覆盖同步到预置基础资料 BAS_PreBaseDataOne（单据体 QSGA_Cust_Entry100009）
     /// </summary>
     [System.ComponentModel.Description("林蓝汽车-物料审核同步包装方式到预置基础资料")]
     public class LinLanXQMatPackSyncServicePlugIn : AbstractOperationServicePlugIn
@@ -69,16 +69,14 @@ namespace kingdee.CustLI.Business.PlugIn
         }
 
         /// <summary>
-        /// 通过直接 ORM 保存数据包到 BAS_PreBaseDataOne
-        /// 已存在记录则设 Id 实现覆盖（UPDATE），不存在则 INSERT
+        /// 保存数据到 BAS_PreBaseDataOne（通过 BusinessDataServiceHelper 触发表单编号与默认值初始化）
         /// </summary>
         private void SaveToPreBaseDataOne(Context ctx, long materialId, string materialName, DynamicObjectCollection packRows)
         {
             FormMetadata meta = MetaDataServiceHelper.Load(ctx, "BAS_PreBaseDataOne") as FormMetadata;
             if (meta == null) return;
 
-            var headType = meta.BusinessInfo.GetDynamicObjectType();
-            var entryItemType = meta.BusinessInfo.GetDynamicObjectType(true);
+            var billType = meta.BusinessInfo.GetDynamicObjectType();
 
             // 获取物料引用类型
             FormMetadata matMeta = MetaDataServiceHelper.Load(ctx, "BD_MATERIAL") as FormMetadata;
@@ -91,44 +89,48 @@ namespace kingdee.CustLI.Business.PlugIn
             var dbService = ServiceFactory.GetDBService(ctx);
             DynamicObjectCollection existRows = dbService.ExecuteDynamicObject(ctx, existSql);
 
-            DynamicObject headObj = new DynamicObject(headType);
-
-            // 已有记录 → 设 Id 使 Save 变 UPDATE（覆盖）
+            DynamicObject bill;
             if (existRows != null && existRows.Count > 0)
             {
-                headObj["Id"] = Convert.ToInt64(existRows[0]["FID"]);
+                bill = BusinessDataServiceHelper.LoadSingle(ctx,
+                    Convert.ToInt64(existRows[0]["FID"]),
+                    billType) as DynamicObject;
             }
-            // 无记录 → 不设 Id，Save 自动 INSERT
+            else
+            {
+                bill = billType.CreateInstance() as DynamicObject;
+            }
 
-            DynamicObject matRef = new DynamicObject(matType);
-            matRef["Id"] = materialId;
-            headObj["F_CUSTLI_FMASTERID"] = matRef;
-            headObj["FName"] = materialName;
+            // 表头赋值（通过LoadSingle获取完整实体，并设_Id以便外键正确解析）
+            DynamicObject matRef = BusinessDataServiceHelper.LoadSingle(ctx, materialId, matType) as DynamicObject;
+            if (matRef != null)
+            {
+                bill["F_CUSTLI_FMASTERID"] = matRef;
+                bill["F_CUSTLI_FMASTERID_Id"] = materialId;
+            }
+            bill["Name"] = materialName;
 
-            DynamicObjectCollection entryCollection = new DynamicObjectCollection(entryItemType, headObj);
+            // 取单据体集合引用（不直接赋值，绕过只读检查）
+            DynamicObjectCollection entryCol = bill["QSGA_Cust_Entry100009"] as DynamicObjectCollection;
+            entryCol.Clear();
 
-            // 遍历物料包装方式页签名行，构建子表条目
             if (packRows != null && packRows.Count > 0)
             {
                 foreach (DynamicObject row in packRows)
                 {
-                    DynamicObject entryObj = new DynamicObject(entryItemType);
-                    entryObj["F_CustLI_PackName"] = ObjectToString(row["F_CustLI_PackName"]);
-                    entryObj["F_CustLI_PackLength"] = ObjectToDecimal(row["F_CustLI_PackLength"]);
-                    entryObj["F_CustLI_PackWidth"] = ObjectToDecimal(row["F_CustLI_PackWidth"]);
-                    entryObj["F_CustLI_PackHeight"] = ObjectToDecimal(row["F_CustLI_PackHeight"]);
-                    entryObj["F_CustLI_PackWeight"] = ObjectToDecimal(row["F_CustLI_PackWeight"]);
-                    entryObj["F_CustLI_PackDesc"] = ObjectToString(row["F_CustLI_PackDesc"]);
-                    entryCollection.Add(entryObj);
+                    DynamicObject entry = entryCol.DynamicCollectionItemPropertyType.CreateInstance() as DynamicObject;
+                    entry["F_CustLI_PackName"] = ObjectToString(row["F_CustLI_PackName"]);
+                    entry["F_CustLI_PackLength"] = ObjectToDecimal(row["F_CustLI_PackLength"]);
+                    entry["F_CustLI_PackWidth"] = ObjectToDecimal(row["F_CustLI_PackWidth"]);
+                    entry["F_CustLI_PackHeight"] = ObjectToDecimal(row["F_CustLI_PackHeight"]);
+                    entry["F_CustLI_PackWeight"] = ObjectToDecimal(row["F_CustLI_PackWeight"]);
+                    entry["F_CustLI_PackDesc"] = ObjectToString(row["F_CustLI_PackDesc"]);
+                    entryCol.Add(entry);
                 }
             }
 
-            // 将子表集合挂载到表头
-            headObj["QSGA_Cust_Entry100009"] = entryCollection;
-
-            // 直接 ORM 保存（有 Id → UPDATE，无 Id → INSERT）
-            ISaveService saveService = ServiceHelper.GetService<ISaveService>();
-            saveService.Save(ctx, new DynamicObject[] { headObj });
+            // 通过 BusinessDataServiceHelper 保存，触发表单编号生成与默认值初始化
+            BusinessDataServiceHelper.Save(ctx, meta.BusinessInfo, new DynamicObject[] { bill }, null, "Save");
         }
 
         private string ObjectToString(object value)
