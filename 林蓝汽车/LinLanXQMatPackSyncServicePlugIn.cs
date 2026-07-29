@@ -14,7 +14,7 @@ namespace kingdee.CustLI.Business.PlugIn
     /// <summary>
     /// 林蓝汽车-物料审核同步包装方式到预置基础资料
     /// 物料审核通过后，将物料包装方式页签（QSGA_t_Cust_Entry100006）的数据
-    /// 覆盖同步到预置基础资料 BAS_PREBDONE（子单据体 QSGA_Cust_Entry100009）
+    /// 覆盖同步到预置基础资料 BAS_PreBaseDataOne（子单据体 QSGA_Cust_Entry100009）
     /// </summary>
     [System.ComponentModel.Description("林蓝汽车-物料审核同步包装方式到预置基础资料")]
     public class LinLanXQMatPackSyncServicePlugIn : AbstractOperationServicePlugIn
@@ -69,12 +69,12 @@ namespace kingdee.CustLI.Business.PlugIn
         }
 
         /// <summary>
-        /// 通过直接 ORM 保存数据包到 BAS_PREBDONE
+        /// 通过直接 ORM 保存数据包到 BAS_PreBaseDataOne
         /// 已存在记录则设 Id 实现覆盖（UPDATE），不存在则 INSERT
         /// </summary>
         private void SaveToPreBaseDataOne(Context ctx, long materialId, string materialName, DynamicObjectCollection packRows)
         {
-            FormMetadata meta = MetaDataServiceHelper.Load(ctx, "BAS_PREBDONE") as FormMetadata;
+            FormMetadata meta = MetaDataServiceHelper.Load(ctx, "BAS_PreBaseDataOne") as FormMetadata;
             if (meta == null) return;
 
             var headType = meta.BusinessInfo.GetDynamicObjectType();
@@ -85,7 +85,7 @@ namespace kingdee.CustLI.Business.PlugIn
             if (matMeta == null) return;
             var matType = matMeta.BusinessInfo.GetDynamicObjectType();
 
-            // 查询 BAS_PREBDONE 是否已有该物料的记录
+            // 查询 BAS_PreBaseDataOne 是否已有该物料的记录
             string existSql = string.Format(
                 "SELECT FID FROM T_BAS_PREBDONE WHERE F_CUSTLI_FMASTERID = {0}", materialId);
             var dbService = ServiceFactory.GetDBService(ctx);
