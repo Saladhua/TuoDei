@@ -6,7 +6,6 @@ using Kingdee.BOS.Core;
 using Kingdee.BOS.Core.DynamicForm.PlugIn;
 using Kingdee.BOS.Core.DynamicForm.PlugIn.Args;
 using Kingdee.BOS.Core.Metadata;
-using Kingdee.BOS.Orm;
 using Kingdee.BOS.Orm.DataEntity;
 using Kingdee.BOS.ServiceHelper;
 
@@ -45,7 +44,7 @@ namespace kingdee.CustLI.Business.PlugIn
                 long materialId = Convert.ToInt64(billObj["Id"]);
                 if (materialId <= 0) continue;
 
-                string materialName = ObjectToString(billObj["FNAME"]);
+                string materialName = ObjectToString(billObj["Name"]);
                 DynamicObjectCollection packRows = QueryMaterialPackEntries(this.Context, materialId);
 
                 SaveToPreBaseDataOne(this.Context, materialId, materialName, packRows);
@@ -70,7 +69,7 @@ namespace kingdee.CustLI.Business.PlugIn
         }
 
         /// <summary>
-        /// 通过 BOS 标准 ISaveService 保存数据包到 BAS_PREBDONE
+        /// 通过直接 ORM 保存数据包到 BAS_PREBDONE
         /// 已存在记录则设 Id 实现覆盖（UPDATE），不存在则 INSERT
         /// </summary>
         private void SaveToPreBaseDataOne(Context ctx, long materialId, string materialName, DynamicObjectCollection packRows)
@@ -78,9 +77,13 @@ namespace kingdee.CustLI.Business.PlugIn
             FormMetadata meta = MetaDataServiceHelper.Load(ctx, "BAS_PREBDONE") as FormMetadata;
             if (meta == null) return;
 
-            var bi = meta.BusinessInfo;
-            var headType = bi.GetDynamicObjectType();
-            var entryItemType = bi.GetDynamicObjectType(true);
+            var headType = meta.BusinessInfo.GetDynamicObjectType();
+            var entryItemType = meta.BusinessInfo.GetDynamicObjectType(true);
+
+            // 获取物料引用类型
+            FormMetadata matMeta = MetaDataServiceHelper.Load(ctx, "BD_MATERIAL") as FormMetadata;
+            if (matMeta == null) return;
+            var matType = matMeta.BusinessInfo.GetDynamicObjectType();
 
             // 查询 BAS_PREBDONE 是否已有该物料的记录
             string existSql = string.Format(
@@ -97,7 +100,9 @@ namespace kingdee.CustLI.Business.PlugIn
             }
             // 无记录 → 不设 Id，Save 自动 INSERT
 
-            headObj["F_CUSTLI_FMASTERID"] = materialId;
+            DynamicObject matRef = new DynamicObject(matType);
+            matRef["Id"] = materialId;
+            headObj["F_CUSTLI_FMASTERID"] = matRef;
             headObj["FName"] = materialName;
 
             DynamicObjectCollection entryCollection = new DynamicObjectCollection(entryItemType, headObj);
@@ -121,10 +126,9 @@ namespace kingdee.CustLI.Business.PlugIn
             // 将子表集合挂载到表头
             headObj["QSGA_Cust_Entry100009"] = entryCollection;
 
-            // BOS 标准 API 保存（有 Id → UPDATE，无 Id → INSERT）
+            // 直接 ORM 保存（有 Id → UPDATE，无 Id → INSERT）
             ISaveService saveService = ServiceHelper.GetService<ISaveService>();
-            OperateOption option = OperateOption.Create();
-            saveService.Save(ctx, bi, new DynamicObject[] { headObj }, option, "Save");
+            saveService.Save(ctx, new DynamicObject[] { headObj });
         }
 
         private string ObjectToString(object value)
