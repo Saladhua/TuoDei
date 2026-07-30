@@ -42,7 +42,7 @@ namespace kingdee.CustLI.Business.PlugIn
                 string materialName = ObjectToString(billObj["Name"]);
                 DynamicObjectCollection packRows = QueryMaterialPackEntries(this.Context, materialId);
 
-                SaveToPreBaseDataOne(this.Context, materialId, materialName, packRows);
+                SavePackRecords(this.Context, materialId, materialName, packRows);
             }
         }
 
@@ -60,61 +60,87 @@ namespace kingdee.CustLI.Business.PlugIn
             return dbService.ExecuteDynamicObject(ctx, sql);
         }
 
-        private void SaveToPreBaseDataOne(Context ctx, long materialId, string materialName, DynamicObjectCollection packRows)
+        private void SavePackRecords(Context ctx, long materialId, string materialName, DynamicObjectCollection packRows)
         {
-            string existSql = string.Format(
-                "SELECT FID FROM T_BAS_PREBDONE WHERE F_CUSTLI_FMASTERID = {0}", materialId);
+            if (packRows == null || packRows.Count <= 0) return;
+
             var dbService = ServiceFactory.GetDBService(ctx);
+
+            string existSql = string.Format(
+                "SELECT FID, F_CustLI_PackName1 FROM T_BAS_PREBDONE WHERE F_CUSTLI_FMASTERID = {0}", materialId);
             DynamicObjectCollection existRows = dbService.ExecuteDynamicObject(ctx, existSql);
 
-            long? existingFid = null;
-            if (existRows != null && existRows.Count > 0)
+            Dictionary<string, long> existingMap = new Dictionary<string, long>();
+            if (existRows != null)
             {
-                existingFid = Convert.ToInt64(existRows[0]["FID"]);
-            }
-
-            bool isNewRecord = !existingFid.HasValue;
-
-            IBillView view = CreateNewBillView(ctx, "BAS_PreBaseDataOne", existingFid);
-
-            DynamicFormViewPlugInProxy proxy = view.GetService<DynamicFormViewPlugInProxy>();
-            proxy.FireOnLoad();
-
-            view.Model.SetItemValueByID("F_CUSTLI_FMASTERID", materialId.ToString(), 0);
-            view.InvokeFieldUpdateService("F_CUSTLI_FMASTERID", 0);
-            view.Model.DataObject["Name"] = materialName;
-
-            DynamicObjectCollection entryCol = view.Model.DataObject["QSGA_Cust_Entry100009"] as DynamicObjectCollection;
-            entryCol.Clear();
-
-            if (packRows != null && packRows.Count > 0)
-            {
-                foreach (DynamicObject row in packRows)
+                foreach (DynamicObject row in existRows)
                 {
-                    DynamicObject entry = entryCol.DynamicCollectionItemPropertyType.CreateInstance() as DynamicObject;
-                    entry["F_CustLI_PackName"] = ObjectToString(row["F_CustLI_PackName"]);
-                    entry["F_CustLI_PackLength"] = ObjectToDecimal(row["F_CustLI_PackLength"]);
-                    entry["F_CustLI_PackWidth"] = ObjectToDecimal(row["F_CustLI_PackWidth"]);
-                    entry["F_CustLI_PackHeight"] = ObjectToDecimal(row["F_CustLI_PackHeight"]);
-                    entry["F_CustLI_PackWeight"] = ObjectToDecimal(row["F_CustLI_PackWeight"]);
-                    entry["F_CustLI_PackDesc"] = ObjectToString(row["F_CustLI_PackDesc"]);
-                    entryCol.Add(entry);
+                    string name = ObjectToString(row["F_CustLI_PackName1"]);
+                    long fid = Convert.ToInt64(row["FID"]);
+                    if (!string.IsNullOrEmpty(name))
+                        existingMap[name] = fid;
                 }
             }
 
-            IOperationResult saveResult = BusinessDataServiceHelper.Save(
-                ctx, view.BillBusinessInfo, view.Model.DataObject,
-                OperateOption.Create(), "Save");
+            string datePrefix = DateTime.Now.ToString("yyyyMMdd");
+            string maxSql = string.Format(
+                "SELECT MAX(FNUMBER) AS FMAXNUM FROM T_BAS_PREBDONE WHERE FNUMBER LIKE '{0}%'", datePrefix);
+            DynamicObjectCollection maxRows = dbService.ExecuteDynamicObject(ctx, maxSql);
 
-            if (!saveResult.IsSuccess)
+            int sequence = 1;
+            if (maxRows != null && maxRows.Count > 0 && maxRows[0]["FMAXNUM"] != null)
             {
-                var errMsgs = saveResult.ValidationErrors.Select(x => x.Message);
-                throw new Exception(
-                    string.Format("BAS_PreBaseDataOne 保存失败：{0}", string.Join(",", errMsgs)));
+                string maxNum = ObjectToString(maxRows[0]["FMAXNUM"]);
+                if (maxNum.Length >= 4)
+                {
+                    string seqStr = maxNum.Substring(maxNum.Length - 4);
+                    int.TryParse(seqStr, out sequence);
+                    sequence++;
+                }
             }
 
-            if (isNewRecord)
+            foreach (DynamicObject packRow in packRows)
             {
+                string packName = ObjectToString(packRow["F_CustLI_PackName"]);
+                if (string.IsNullOrEmpty(packName)) continue;
+
+                long? existingFid = null;
+                if (existingMap.TryGetValue(packName, out long fid))
+                    existingFid = fid;
+
+                IBillView view = CreateNewBillView(ctx, "BAS_PreBaseDataOne", existingFid);
+
+                DynamicFormViewPlugInProxy proxy = view.GetService<DynamicFormViewPlugInProxy>();
+                proxy.FireOnLoad();
+
+                view.Model.SetItemValueByID("F_CUSTLI_FMASTERID", materialId.ToString(), 0);
+                view.InvokeFieldUpdateService("F_CUSTLI_FMASTERID", 0);
+                view.Model.DataObject["Name"] = materialName;
+
+                if (!existingFid.HasValue)
+                {
+                    string number = string.Format("{0}{1:D4}", datePrefix, sequence++);
+                    view.Model.DataObject["Number"] = number;
+                }
+
+                view.Model.DataObject["F_CustLI_PackName1"] = ObjectToString(packRow["F_CustLI_PackName"]);
+                view.Model.DataObject["F_CustLI_PackLength1"] = ObjectToDecimal(packRow["F_CustLI_PackLength"]);
+                view.Model.DataObject["F_CustLI_PackWidth1"] = ObjectToDecimal(packRow["F_CustLI_PackWidth"]);
+                view.Model.DataObject["F_CustLI_PackHeight1"] = ObjectToDecimal(packRow["F_CustLI_PackHeight"]);
+                view.Model.DataObject["F_CustLI_PackWeight1"] = ObjectToDecimal(packRow["F_CustLI_PackWeight"]);
+                view.Model.DataObject["F_CustLI_PackDesc1"] = ObjectToString(packRow["F_CustLI_PackDesc"]);
+
+                IOperationResult saveResult = BusinessDataServiceHelper.Save(
+                    ctx, view.BillBusinessInfo, view.Model.DataObject,
+                    OperateOption.Create(), "Save");
+
+                if (!saveResult.IsSuccess)
+                {
+                    var errMsgs = saveResult.ValidationErrors.Select(x => x.Message);
+                    throw new Exception(
+                        string.Format("BAS_PreBaseDataOne 保存失败：{0}", string.Join(",", errMsgs)));
+                }
+
                 long savedId = Convert.ToInt64(view.Model.DataObject["Id"]);
                 object[] ids = new object[] { savedId };
 

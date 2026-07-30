@@ -35,8 +35,8 @@ namespace kingdee.CustLI.Business.PlugIn
             DynamicObject billObj = this.View.Model.DataObject;
             if (billObj == null) return;
 
-            // 获取明细行集合：BD_CUSTMATERENTRY 为客户物料对应表的单据体标识
-            DynamicObjectCollection entryCollection = billObj["BD_CUSTMATERENTRY"] as DynamicObjectCollection;
+            // 获取明细行集合：Sal_CustMatMappingEntry 为客户物料对应表的单据体标识
+            DynamicObjectCollection entryCollection = billObj["Sal_CustMatMappingEntry"] as DynamicObjectCollection;
             if (entryCollection == null || entryCollection.Count == 0) return;
 
             // ---- 第一遍遍历：收集所有图号 ----
