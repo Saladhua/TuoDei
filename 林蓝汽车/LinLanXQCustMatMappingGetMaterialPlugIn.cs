@@ -1,14 +1,10 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Data;
-using System.Text;
 using Kingdee.BOS;
 using Kingdee.BOS.Core.Bill.PlugIn;
 using Kingdee.BOS.Core.DynamicForm.PlugIn;
 using Kingdee.BOS.Core.DynamicForm.PlugIn.Args;
 using Kingdee.BOS.Orm.DataEntity;
-using Kingdee.BOS.ServiceHelper;
-using Kingdee.BOS.Util;
 
 namespace kingdee.CustLI.Business.PlugIn
 {
@@ -66,7 +62,7 @@ namespace kingdee.CustLI.Business.PlugIn
 
             // ---- 批量查询：一次查出所有图号的匹配物料 ----
             // 用字典缓存查询结果，key=图号, value=物料内码
-            Dictionary<string, long> drawingToMaterialMap = BatchQueryMaterialByDrawingNos(this.View.Context, drawingNoList);
+            Dictionary<string, long> drawingToMaterialMap = LinLanXQMaterialHelper.BatchQueryMaterialByDrawingNos(this.View.Context, drawingNoList);
 
             // ---- 第二遍遍历：逐行回填匹配结果 ----
             rowIndex = 0;
@@ -103,63 +99,6 @@ namespace kingdee.CustLI.Business.PlugIn
             }
         }
 
-        /// <summary>
-        /// 批量查询：根据图号列表从物料基础资料(T_BD_MATERIAL)查询匹配的物料内码
-        /// 使用 SQL IN 一次查询，避免循环内逐行查 DB（性能红线）
-        /// </summary>
-        /// <param name="ctx">金蝶上下文对象</param>
-        /// <param name="drawingNoList">去重后的图号列表</param>
-        /// <returns>图号→物料内码 的映射字典，图号不存在的不会出现在字典中</returns>
-        private Dictionary<string, long> BatchQueryMaterialByDrawingNos(Context ctx, List<string> drawingNoList)
-        {
-            Dictionary<string, long> result = new Dictionary<string, long>();
 
-            if (drawingNoList == null || drawingNoList.Count == 0) return result;
-
-            // 构造 IN 查询：产品图号(F_QSGA_TEXT_33Z)作为图号使用，在物料主表(T_BD_MATERIAL)中查找
-            StringBuilder sql = new StringBuilder();
-            sql.AppendLine("SELECT");
-            sql.AppendLine("    a1.FMATERIALID,");
-            sql.AppendLine("    a1.F_QSGA_TEXT_33Z AS FDRAWINGNO");
-            sql.AppendLine("FROM T_BD_MATERIAL a1");
-            sql.AppendLine("WHERE a1.F_QSGA_TEXT_33Z IN (");
-
-            for (int i = 0; i < drawingNoList.Count; i++)
-            {
-                if (i > 0) sql.Append(",");
-                // Replace("'", "''") 转义单引号，防止 SQL 注入攻击
-                sql.Append("'" + drawingNoList[i].Replace("'", "''") + "'");
-            }
-
-            sql.AppendLine(")");
-
-            DataSet ds = null;
-            try
-            {
-                ds = DBServiceHelper.ExecuteDataSet(ctx, sql.ToString());
-            }
-            catch
-            {
-                // 查询异常时返回空结果，不阻断用户操作
-                return result;
-            }
-
-            // 将查询结果装入字典，后续按图号快速查找物料内码
-            if (ds != null && ds.Tables.Count > 0 && ds.Tables[0].Rows.Count > 0)
-            {
-                foreach (DataRow row in ds.Tables[0].Rows)
-                {
-                    long materialId = Convert.ToInt64(row["FMATERIALID"]);
-                    string drawingNo = row["FDRAWINGNO"].ToString();
-                    // 防止多个相同的图号重复写入（实际IN结果不会重复，但做防御性判断）
-                    if (!result.ContainsKey(drawingNo))
-                    {
-                        result[drawingNo] = materialId;
-                    }
-                }
-            }
-
-            return result;
-        }
     }
 }

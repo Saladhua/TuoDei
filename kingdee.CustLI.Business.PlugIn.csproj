@@ -197,6 +197,7 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="林蓝汽车\公有方法\LinLanXQPriceQueryHelper.cs" />
+    <Compile Include="林蓝汽车\公有方法\LinLanXQMaterialHelper.cs" />
     <Compile Include="林蓝汽车\LinLanXQSalQuotationGetPricePlugIn.cs" />
     <Compile Include="林蓝汽车\LinLanXQSalOrderGetPricePlugIn.cs" />
     <Compile Include="林蓝汽车\LinLanXQCustMatMappingGetMaterialPlugIn.cs" />

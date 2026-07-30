@@ -68,6 +68,7 @@ namespace kingdee.CustLI.Business.PlugIn
             StringBuilder sql = new StringBuilder();
             sql.AppendLine("SELECT a.FID, e.FENTRYID, e.FMATERIALID,");
             sql.AppendLine("       f.FTAXPRICE, f.FPRICE, f.FTAXRATE,");
+            sql.AppendLine("       e.F_QSGA_TEXT_33Z AS FDRAWINGNO,");
             sql.AppendLine("       fin.FSETTLECURRID, a.FBILLNO, a.FDATE, e.FSEQ");
             sql.AppendLine("FROM T_SAL_ORDER a");
             sql.AppendLine("JOIN T_SAL_ORDERENTRY e ON a.FID = e.FID");
@@ -88,14 +89,7 @@ namespace kingdee.CustLI.Business.PlugIn
             if (!string.IsNullOrEmpty(firstReq.CountryRangeId))
                 sql.AppendLine("AND c.FCOUNTRY = '" + firstReq.CountryRangeId.Replace("'", "''") + "'");
 
-            // 图号：非空（去除空格）才过滤
-            if (!string.IsNullOrWhiteSpace(firstReq.DrawingNo))
-                sql.AppendLine("AND e.F_QSGA_TEXT_33Z = '" + firstReq.DrawingNo.Replace("'", "''") + "'");
-
-            // 税率：仅销售订单取价需要，报价单取价不匹配税率
-            if (!firstReq.IsForQuotation)
-                sql.AppendLine("AND f.FTAXRATE = " + firstReq.TaxRate.ToString("F6"));
-
+            // 图号、税率改为 C# 逐请求匹配（见下方匹配循环），不再作为 SQL 全局条件
             // 物料 IN 列表
             string[] matIds = new string[requests.Count];
             for (int i = 0; i < requests.Count; i++)
@@ -159,6 +153,21 @@ namespace kingdee.CustLI.Business.PlugIn
                     {
                         if (req.MaterialId != materialId) continue;
                         if (req.SettleCurrId != settleCurrId) continue;
+
+                        // 图号：非空时才匹配，每个请求独立过滤
+                        if (!string.IsNullOrWhiteSpace(req.DrawingNo))
+                        {
+                            string rowDrawingNo = row["FDRAWINGNO"]?.ToString() ?? "";
+                            if (!string.Equals(req.DrawingNo, rowDrawingNo, StringComparison.OrdinalIgnoreCase))
+                                continue;
+                        }
+
+                        // 税率：仅销售订单取价需要，报价单不匹配税率
+                        if (!req.IsForQuotation)
+                        {
+                            decimal rowTaxRate = row["FTAXRATE"] == DBNull.Value ? 0m : Convert.ToDecimal(row["FTAXRATE"]);
+                            if (Math.Abs(req.TaxRate - rowTaxRate) > 0.0001m) continue;
+                        }
 
                         string key = BuildKey(req);
                         // 若该请求已被匹配过，跳过后续重复记录
