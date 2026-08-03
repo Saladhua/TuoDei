@@ -32,6 +32,10 @@
     <WarningLevel>4</WarningLevel>
   </PropertyGroup>
   <ItemGroup>
+    <Reference Include="ITextSharp, Version=5.3.5.0, Culture=neutral, PublicKeyToken=8354ae6d2174ddca, processorArchitecture=MSIL">
+      <SpecificVersion>False</SpecificVersion>
+      <HintPath>D:\kingdee\WebSite\bin\ITextSharp.dll</HintPath>
+    </Reference>
     <Reference Include="Kingdee.BOS">
       <HintPath>D:\kingdee\WebSite\bin\Kingdee.BOS.dll</HintPath>
     </Reference>
@@ -203,6 +207,15 @@
     <Compile Include="林蓝汽车\LinLanXQCustMatMappingGetMaterialPlugIn.cs" />
     <Compile Include="林蓝汽车\LinLanXQBomPackMethodValidator.cs" />
     <Compile Include="林蓝汽车\LinLanXQMatPackSyncServicePlugIn.cs" />
+  </ItemGroup>
+  <ItemGroup>
+    <Compile Include="吉茂\公有方法\JmPdfTextExtractor.cs" />
+    <Compile Include="吉茂\公有方法\JmPdfParseModels.cs" />
+    <Compile Include="吉茂\公有方法\JmPdfParseHelper.cs" />
+    <Compile Include="吉茂\公有方法\JmMaterialHelper.cs" />
+    <Compile Include="吉茂\公有方法\JmSalOrderSaveHelper.cs" />
+    <Compile Include="吉茂\JmSalOrderListImportPlugIn.cs" />
+    <Compile Include="吉茂\JmSalOrderImportPlugIn.cs" />
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
 </Project>
