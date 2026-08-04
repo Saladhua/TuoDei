@@ -201,7 +201,7 @@ namespace kingdee.CustLI.Business.PlugIn
         {
             string sql = string.Format(
                 @"SELECT a1.FID AS FID
-                  FROM T_SAL_SALEORDER a1
+                  FROM T_SAL_ORDER a1
                   WHERE a1.F_CustLI_BillNo = '{0}'
                     AND a1.FDocumentStatus <> 'B'",
                 billNo.Replace("'", "''"));
@@ -290,7 +290,7 @@ namespace kingdee.CustLI.Business.PlugIn
         {
             string sql = string.Format(
                 @"SELECT a1.FBaseUnitId AS FBaseUnitId
-                  FROM T_BD_MATERIAL a1
+                  FROM t_BD_MaterialBase a1
                   WHERE a1.FMATERIALID = {0}",
                 materialId);
 
