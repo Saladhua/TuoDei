@@ -116,6 +116,7 @@ namespace kingdee.CustLI.Business.PlugIn
 
             List<string> logLines = new List<string>();
             int successCount = 0;
+            bool allSuccess = true;
             foreach (string filePath in _filePaths)
             {
                 string fileName = Path.GetFileName(filePath);
@@ -163,20 +164,24 @@ namespace kingdee.CustLI.Business.PlugIn
                     else
                     {
                         logLines.Add(fileName + "：" + saveResult.Message);
+                        allSuccess = false;
+                        this.View.ShowMessage(fileName + "：" + saveResult.Message, MessageBoxType.Error);
                     }
                 }
                 catch (Exception ex)
                 {
                     logLines.Add(fileName + "：异常：" + ex.Message);
+                    allSuccess = false;
+                    this.View.ShowMessage(fileName + "：异常：" + ex.Message, MessageBoxType.Error);
                 }
             }
 
-            string summary = string.Format("共 {0} 份，成功 {1} 份。\r\n\r\n{2}",
-                _filePaths.Count, successCount, string.Join("\r\n", logLines));
-            this.View.ShowMessage(summary, MessageBoxType.Advise);
-
-            // 处理完毕关闭弹窗，列表插件 ShowForm 回调触发列表刷新
-            this.View.Close();
+            // 全部成功：关闭弹窗（列表插件 ShowForm 回调触发列表刷新），新订单在列表中可见；
+            // 存在失败/异常时弹窗保持打开便于重试
+            if (allSuccess)
+            {
+                this.View.Close();
+            }
         }
 
         /// <summary>
