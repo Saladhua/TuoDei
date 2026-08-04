@@ -45,9 +45,16 @@ namespace kingdee.CustLI.Business.PlugIn
         private static readonly Regex BillNoPattern =
             new Regex(@"Purchase\s+order\s+No\.?\s*[:]?\s*(\d+)", RegexOptions.IgnoreCase);
 
-        /// <summary>客户名称：Buyer 后的客户名称（中文为主，含中英文/括号，联调按样例 PDF 校准）</summary>
+        /// <summary>通力英文买方名称：PDF 只能抽到英文时，归一为金蝶客户中文名称。</summary>
+        private static readonly Regex KoneCustomerPattern =
+            new Regex(@"KONE\s+Elevators\s+Co\.?\s*,?\s*Ltd\.?", RegexOptions.IgnoreCase);
+
+        /// <summary>客户名称：Buyer 后的中文客户名称（英文买方走配置化归一，避免 Buyer VAT No 误识别）。</summary>
         private static readonly Regex CustomerPattern =
-            new Regex(@"Buyer\s*[:]?\s*([\u4e00-\u9fa5A-Za-z（）()]{2,60})", RegexOptions.IgnoreCase);
+            new Regex(@"Buyer\s*[:]?\s*([\u4e00-\u9fa5（）()]{2,60})", RegexOptions.IgnoreCase);
+
+        /// <summary>通力在金蝶客户基础资料中的中文名称。</summary>
+        private const string KoneCustomerName = "通力电梯有限公司";
 
         /// <summary>订单日期：Date 20.07.2026（取第一个 Date 后的日期）</summary>
         private static readonly Regex OrderDatePattern =
@@ -147,8 +154,7 @@ namespace kingdee.CustLI.Business.PlugIn
             Match m = BillNoPattern.Match(fullText);
             if (m.Success) head.BillNo = m.Groups[1].Value;
 
-            m = CustomerPattern.Match(fullText);
-            if (m.Success) head.Customer = m.Groups[1].Value;
+            head.Customer = ParseCustomerName(fullText);
 
             m = OrderDatePattern.Match(fullText);
             if (m.Success) head.OrderDate = m.Groups[1].Value;
@@ -165,6 +171,23 @@ namespace kingdee.CustLI.Business.PlugIn
             {
                 head.DeliveryTerm = m.Groups[1].Value.Trim();
             }
+        }
+
+        /// <summary>
+        /// 解析客户名称；中文 Buyer 名称优先，英文 KONE 买方名称按金蝶客户 FNAME 归一。
+        /// </summary>
+        /// <param name="fullText">全文</param>
+        /// <returns>客户名称；取不到返回空串</returns>
+        private static string ParseCustomerName(string fullText)
+        {
+            Match m = CustomerPattern.Match(fullText);
+            if (m.Success) return m.Groups[1].Value.Trim();
+
+            // 样例 PDF 的 Buyer 后先出现 VAT No，客户英文名出现在 Delivery address 区域。
+            m = KoneCustomerPattern.Match(fullText);
+            if (m.Success) return KoneCustomerName;
+
+            return "";
         }
 
         // ==================== 组件行解析 ====================

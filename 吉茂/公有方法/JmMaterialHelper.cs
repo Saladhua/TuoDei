@@ -31,11 +31,11 @@ namespace kingdee.CustLI.Business.PlugIn
     {
         // ==================== 配置区（演示环境需确认） ====================
 
-        /// <summary>物料创建-物料分组编码（演示环境待确认）</summary>
-        public const string MaterialGroupNumber = "GJM";
+        /// <summary>物料创建-物料分组编码（固定值，演示环境确认 TCOMM）</summary>
+        public const string MaterialGroupNumber = "TCOMM";
 
-        /// <summary>物料创建-基本计量单位编码（演示环境待确认，如 PC/件）</summary>
-        public const string BaseUnitNumber = "PC";
+        /// <summary>物料创建-基本计量单位编码（固定值，演示环境确认 tai）</summary>
+        public const string BaseUnitNumber = "tai";
 
         /// <summary>物料创建-自制件标识（FErpClsID=2）</summary>
         public const string ErpClassSelfMade = "2";
@@ -179,19 +179,11 @@ namespace kingdee.CustLI.Business.PlugIn
             view.Model.DataObject["Number"] = number;
             view.Model.DataObject["Name"] = number;
 
-            // 物料分组
-            long groupId = QueryBaseDataId(ctx, "T_BD_MATERIALGROUP", "FMATERIALGROUPID", MaterialGroupNumber);
-            if (groupId > 0)
-            {
-                view.Model.SetItemValueByID("FMaterialGroup", groupId.ToString(), 0);
-            }
+            // 物料分组（固定编码直传，不查库）
+            view.Model.SetValue("FMaterialGroup", MaterialGroupNumber);
 
-            // 基本计量单位
-            long unitId = QueryBaseDataId(ctx, "T_BD_UNIT", "FUNITID", BaseUnitNumber);
-            if (unitId > 0)
-            {
-                view.Model.SetItemValueByID("FBaseUnitId", unitId.ToString(), 0);
-            }
+            // 基本计量单位（固定编码直传，不查库）
+            view.Model.SetValue("FBaseUnitId", BaseUnitNumber);
 
             // 物料属性：自制件；启用状态
             view.Model.SetValue("FErpClsID", ErpClassSelfMade);
@@ -201,32 +193,6 @@ namespace kingdee.CustLI.Business.PlugIn
 
             long materialId = Convert.ToInt64(view.Model.DataObject["Id"]);
             return materialId;
-        }
-
-        /// <summary>
-        /// 按编号查询基础资料内码（通用，用于物料分组/计量单位等）。
-        /// </summary>
-        /// <param name="ctx">上下文</param>
-        /// <param name="tableName">基础资料主表名</param>
-        /// <param name="idField">主键字段名</param>
-        /// <param name="number">编号</param>
-        /// <returns>基础资料内码；未找到返回 0</returns>
-        public static long QueryBaseDataId(Context ctx, string tableName, string idField, string number)
-        {
-            if (string.IsNullOrEmpty(number)) return 0;
-            string sql = string.Format(
-                @"SELECT a1.{0} AS FID
-                  FROM {1} a1
-                  WHERE a1.FNUMBER = '{2}'",
-                idField, tableName, number.Replace("'", "''"));
-
-            var dbService = ServiceFactory.GetDBService(ctx);
-            DynamicObjectCollection rows = dbService.ExecuteDynamicObject(ctx, sql);
-            if (rows != null && rows.Count > 0 && rows[0]["FID"] != null)
-            {
-                return Convert.ToInt64(rows[0]["FID"]);
-            }
-            return 0;
         }
 
         /// <summary>
