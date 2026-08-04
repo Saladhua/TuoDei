@@ -16,7 +16,7 @@ namespace kingdee.CustLI.Business.PlugIn
     ///
     /// 生成流程（数据包保存，用户确认 2026-08-03）：
     ///   1. 重复校验：客户订单号 F_CustLI_BillNo 已存在（非作废）→ 跳过该份
-    ///   2. 基础资料就绪：客户按 PDF Buyer 名称查内码；销售组织/单据类型/销售员/币别 写死编码查内码
+    ///   2. 基础资料就绪：客户按 PDF Buyer 名称查内码；销售组织/单据类型/销售员/币别 写死编码直接 SetValue
     ///   3. 物料就绪：梯号缺失自动建（JmMaterialHelper），组件缺失报错中止
     ///   4. 构造销售订单数据包（CreateNewBillView）→ 表头 + 明细行赋值 → Save/Submit/Audit
     ///
@@ -73,20 +73,14 @@ namespace kingdee.CustLI.Business.PlugIn
                 return result;
             }
 
-            // 2. 基础资料内码查询
+            // 2. 基础资料：客户按名称查内码（活的）；币别取 PDF（未取到用写死值）
             long customerId = QueryBaseDataByName(ctx, "T_BD_CUSTOMER_L", "FCUSTID", order.Head.Customer);
-            long saleOrgId = QueryBaseDataId(ctx, "T_ORG_ORGANIZATIONS", "FORGID", SaleOrgNumber);
-            long billTypeId = QueryBaseDataId(ctx, "T_BAS_BILLTYPE", "FID", BillTypeNumber);
-            long salerId = QueryBaseDataId(ctx, "T_BD_SALESMAN", "FSALESMANID", SalerNumber);
             string currencyNumber = string.IsNullOrEmpty(order.Head.Currency)
                 ? DefaultCurrencyNumber : order.Head.Currency;
-            long currencyId = QueryBaseDataId(ctx, "T_BD_CURRENCY", "FCURRENCYID", currencyNumber);
 
-            if (customerId <= 0 || saleOrgId <= 0 || billTypeId <= 0 || salerId <= 0 || currencyId <= 0)
+            if (customerId <= 0)
             {
-                result.Message = string.Format(
-                    "基础资料编码未配置或未找到（客户 {0}、组织 {1}、单据类型 {2}、销售员 {3}、币别 {4}），请在 JmSalOrderSaveHelper 配置区确认",
-                    order.Head.Customer, SaleOrgNumber, BillTypeNumber, SalerNumber, currencyNumber);
+                result.Message = string.Format("客户 {0} 在系统中未找到（按名称 T_BD_CUSTOMER_L.FNAME 查询），已跳过", order.Head.Customer);
                 return result;
             }
 
@@ -99,10 +93,11 @@ namespace kingdee.CustLI.Business.PlugIn
                 IBillView view = JmMaterialHelper.CreateNewBillView(ctx, SaleOrderFormId, null);
 
                 // ---- 表头 ----
-                view.Model.SetItemValueByID("FBillTypeID", billTypeId.ToString(), 0);
-                view.Model.SetItemValueByID("FSaleOrgId", saleOrgId.ToString(), 0);
+                // 组织/单据类型/销售员为写死编码，直接 SetValue 传编码；客户为活值，用内码
+                view.Model.SetValue("FBillTypeID", BillTypeNumber);
+                view.Model.SetValue("FSaleOrgId", SaleOrgNumber);
                 view.Model.SetItemValueByID("FCustId", customerId.ToString(), 0);
-                view.Model.SetItemValueByID("FSalerId", salerId.ToString(), 0);
+                view.Model.SetValue("FSalerId", SalerNumber);
 
                 DateTime orderDate;
                 if (DateTime.TryParseExact(order.Head.OrderDate, "dd.MM.yyyy",
@@ -111,8 +106,8 @@ namespace kingdee.CustLI.Business.PlugIn
                     view.Model.SetValue("FDate", orderDate);
                 }
 
-                // 财务信息：结算币别
-                view.Model.SetItemValueByID("FSettleCurrId", currencyId.ToString(), 0);
+                // 财务信息：结算币别（写死/PDF 编码直接赋值）
+                view.Model.SetValue("FSettleCurrId", currencyNumber);
 
                 // 表头自定义字段：客户订单号（重复校验用）
                 view.Model.SetValue("F_CustLI_BillNo", billNo);
@@ -132,7 +127,7 @@ namespace kingdee.CustLI.Business.PlugIn
                     view.Model.CreateNewEntryRow(SaleOrderEntryKey);
 
                     view.Model.SetItemValueByID("FMATERIALID", materialId.ToString(), row);
-                    view.Model.SetItemValueByID("FSettleOrgIds", saleOrgId.ToString(), row);
+                    view.Model.SetValue("FSettleOrgIds", SaleOrgNumber, row);
 
                     // 单位（计价单位/单位 = 梯号物料基本单位）
                     long unitId = QueryMaterialBaseUnit(ctx, materialId);
@@ -288,19 +283,6 @@ namespace kingdee.CustLI.Business.PlugIn
                 return Convert.ToInt64(rows[0]["FBaseUnitId"]);
             }
             return 0;
-        }
-
-        /// <summary>
-        /// 按编号查询基础资料内码（复用 JmMaterialHelper 的通用查询）。
-        /// </summary>
-        /// <param name="ctx">上下文</param>
-        /// <param name="tableName">基础资料主表名</param>
-        /// <param name="idField">主键字段名</param>
-        /// <param name="number">编号</param>
-        /// <returns>基础资料内码；未找到返回 0</returns>
-        private static long QueryBaseDataId(Context ctx, string tableName, string idField, string number)
-        {
-            return JmMaterialHelper.QueryBaseDataId(ctx, tableName, idField, number);
         }
 
         /// <summary>
