@@ -16,7 +16,7 @@ namespace kingdee.CustLI.Business.PlugIn
     ///
     /// 生成流程（数据包保存，用户确认 2026-08-03）：
     ///   1. 重复校验：客户订单号 F_CustLI_BillNo 已存在（非作废）→ 跳过该份
-    ///   2. 基础资料就绪：客户按 PDF Buyer 名称查内码；销售组织/单据类型/销售员/币别 写死编码直接 SetValue
+    ///   2. 基础资料就绪：客户按 PDF Buyer 名称查内码；销售组织/单据类型/销售员/币别 按编码查内码后 SetItemValueByID
     ///   3. 物料就绪：梯号缺失自动建（JmMaterialHelper），组件缺失报错中止
     ///   4. 构造销售订单数据包（CreateNewBillView）→ 表头 + 明细行赋值 → Save/Submit/Audit
     ///
@@ -93,11 +93,34 @@ namespace kingdee.CustLI.Business.PlugIn
                 IBillView view = JmMaterialHelper.CreateNewBillView(ctx, SaleOrderFormId, null);
 
                 // ---- 表头 ----
-                // 组织/单据类型/销售员为写死编码，直接 SetValue 传编码；客户为活值，用内码
-                view.Model.SetValue("FBillTypeID", BillTypeNumber);
-                view.Model.SetValue("FSaleOrgId", SaleOrgNumber);
+                // 组织/单据类型/销售员/币别：查内码 + SetItemValueByID（基础资料引用字段红线）
+                string billTypeId = JmMaterialHelper.QueryBaseDataId(ctx, "T_BAS_BILLTYPE", "FBILLTYPEID", "FNumber", BillTypeNumber);
+                string saleOrgId = JmMaterialHelper.QueryBaseDataId(ctx, "T_ORG_ORGANIZATIONS", "FORGID", "FNumber", SaleOrgNumber);
+                string salerId = JmMaterialHelper.QueryBaseDataId(ctx, "T_BD_STAFF", "FSTAFFID", "FStaffNumber", SalerNumber);
+                string settleCurrId = JmMaterialHelper.QueryBaseDataId(ctx, "T_BD_CURRENCY", "FCURRENCYID", "FNumber", currencyNumber);
+
+                if (!string.IsNullOrEmpty(billTypeId))
+                {
+                    view.Model.SetItemValueByID("FBillTypeID", billTypeId, 0);
+                    view.InvokeFieldUpdateService("FBillTypeID", 0);
+                }
+                if (!string.IsNullOrEmpty(saleOrgId))
+                {
+                    view.Model.SetItemValueByID("FSaleOrgId", saleOrgId, 0);
+                    view.InvokeFieldUpdateService("FSaleOrgId", 0);
+                }
+                if (!string.IsNullOrEmpty(salerId))
+                {
+                    view.Model.SetItemValueByID("FSalerId", salerId, 0);
+                    view.InvokeFieldUpdateService("FSalerId", 0);
+                }
+                if (!string.IsNullOrEmpty(settleCurrId))
+                {
+                    view.Model.SetItemValueByID("FSettleCurrId", settleCurrId, 0);
+                    view.InvokeFieldUpdateService("FSettleCurrId", 0);
+                }
                 view.Model.SetItemValueByID("FCustId", customerId.ToString(), 0);
-                view.Model.SetValue("FSalerId", SalerNumber);
+                view.InvokeFieldUpdateService("FCustId", 0);
 
                 DateTime orderDate;
                 if (DateTime.TryParseExact(order.Head.OrderDate, "dd.MM.yyyy",
@@ -106,8 +129,8 @@ namespace kingdee.CustLI.Business.PlugIn
                     view.Model.SetValue("FDate", orderDate);
                 }
 
-                // 财务信息：结算币别（写死/PDF 编码直接赋值）
-                view.Model.SetValue("FSettleCurrId", currencyNumber);
+                // 财务信息：结算币别（查内码 + SetItemValueByID，基础资料引用字段红线）
+                view.Model.SetItemValueByID("FSettleCurrId", settleCurrId, 0);
 
                 // 表头自定义字段：客户订单号（重复校验用）
                 view.Model.SetValue("F_CustLI_BillNo", billNo);
@@ -127,14 +150,24 @@ namespace kingdee.CustLI.Business.PlugIn
                     view.Model.CreateNewEntryRow(SaleOrderEntryKey);
 
                     view.Model.SetItemValueByID("FMATERIALID", materialId.ToString(), row);
-                    view.Model.SetValue("FSettleOrgIds", SaleOrgNumber, row);
+                    view.InvokeFieldUpdateService("FMATERIALID", row);
+
+                    // 结算组织（查内码 + SetItemValueByID，基础资料引用字段红线）
+                    string settleOrgId = JmMaterialHelper.QueryBaseDataId(ctx, "T_ORG_ORGANIZATIONS", "FORGID", "FNumber", SaleOrgNumber);
+                    if (!string.IsNullOrEmpty(settleOrgId))
+                    {
+                        view.Model.SetItemValueByID("FSettleOrgIds", settleOrgId, row);
+                        view.InvokeFieldUpdateService("FSettleOrgIds", row);
+                    }
 
                     // 单位（计价单位/单位 = 梯号物料基本单位）
                     long unitId = QueryMaterialBaseUnit(ctx, materialId);
                     if (unitId > 0)
                     {
                         view.Model.SetItemValueByID("FPriceUnitId", unitId.ToString(), row);
+                        view.InvokeFieldUpdateService("FPriceUnitId", row);
                         view.Model.SetItemValueByID("FUnitID", unitId.ToString(), row);
+                        view.InvokeFieldUpdateService("FUnitID", row);
                     }
 
                     view.Model.SetValue("FQTY", 1m, row);

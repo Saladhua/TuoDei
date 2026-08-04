@@ -179,11 +179,21 @@ namespace kingdee.CustLI.Business.PlugIn
             view.Model.DataObject["Number"] = number;
             view.Model.DataObject["Name"] = number;
 
-            // 物料分组（固定编码直传，不查库）
-            view.Model.SetValue("FMaterialGroup", MaterialGroupNumber);
+            // 物料分组（查内码 + SetItemValueByID，基础资料引用字段红线）
+            string groupId = QueryBaseDataId(ctx, "T_BD_MATERIALGROUP", "FID", "FNumber", MaterialGroupNumber);
+            if (!string.IsNullOrEmpty(groupId))
+            {
+                view.Model.SetItemValueByID("FMaterialGroup", groupId, 0);
+                view.InvokeFieldUpdateService("FMaterialGroup", 0);
+            }
 
-            // 基本计量单位（固定编码直传，不查库）
-            view.Model.SetValue("FBaseUnitId", BaseUnitNumber);
+            // 基本计量单位（查内码 + SetItemValueByID，基础资料引用字段红线）
+            string unitId = QueryBaseDataId(ctx, "T_BD_UNIT", "FUNITID", "FNumber", BaseUnitNumber);
+            if (!string.IsNullOrEmpty(unitId))
+            {
+                view.Model.SetItemValueByID("FBaseUnitId", unitId, 0);
+                view.InvokeFieldUpdateService("FBaseUnitId", 0);
+            }
 
             // 物料属性：自制件；启用状态
             view.Model.SetValue("FErpClsID", ErpClassSelfMade);
@@ -193,6 +203,33 @@ namespace kingdee.CustLI.Business.PlugIn
 
             long materialId = Convert.ToInt64(view.Model.DataObject["Id"]);
             return materialId;
+        }
+
+        /// <summary>
+        /// 按编号查询基础资料内码（通用，兼容 long/GUID 主键，返回字符串）。
+        /// </summary>
+        /// <param name="ctx">上下文</param>
+        /// <param name="tableName">基础资料主表名</param>
+        /// <param name="idField">主键字段名</param>
+        /// <param name="numberField">编码字段名（销售员用 FStaffNumber，其余用 FNumber）</param>
+        /// <param name="number">编号</param>
+        /// <returns>基础资料内码字符串；未找到返回空串</returns>
+        public static string QueryBaseDataId(Context ctx, string tableName, string idField, string numberField, string number)
+        {
+            if (string.IsNullOrEmpty(number)) return "";
+            string sql = string.Format(
+                @"SELECT a1.{0} AS FID
+                  FROM {1} a1
+                  WHERE a1.{2} = '{3}'",
+                idField, tableName, numberField, number.Replace("'", "''"));
+
+            var dbService = ServiceFactory.GetDBService(ctx);
+            DynamicObjectCollection rows = dbService.ExecuteDynamicObject(ctx, sql);
+            if (rows != null && rows.Count > 0 && rows[0]["FID"] != null)
+            {
+                return rows[0]["FID"].ToString();
+            }
+            return "";
         }
 
         /// <summary>
