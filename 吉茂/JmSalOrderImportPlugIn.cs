@@ -22,8 +22,9 @@ namespace kingdee.CustLI.Business.PlugIn
     /// 多份 PDF 批量：上传控件允许多选，逐份处理，单份失败不阻断其余。
     ///
     /// 演示环境配置（BOS 设计器）：
-    ///   - 新建动态表单，添加 HtmlFile 上传控件（Key = F_CustLI_FileUpdate_Pdf，允许多文件、扩展名 pdf）
-    ///   - 添加"导入"按钮（Key = F_CustLI_Button_Import）
+    ///   - 新建动态表单（唯一标识 k294935dab5cb40c6b47bfa0b5108d7ef），添加 HtmlFile 上传控件（Key = F_OKVA_FileUpdate_83g，允许多文件、扩展名 pdf）
+    ///   - 添加"导入"按钮（Key = F_OKVA_Button_re5）
+    ///   - 添加"取消"按钮（Key = F_OKVA_Button_apv）
     ///   - 动态表单插件注册本类
     ///
     /// 实现参考：鹤见泵业 SalOrderImportPlugIn.cs（上传回调 + 按钮处理）。
@@ -34,11 +35,14 @@ namespace kingdee.CustLI.Business.PlugIn
         /// <summary>上传文件服务目录（上传控件默认存储路径）</summary>
         private const string FileUploadServicesDir = "FileUploadServices/UploadFiles";
 
-        /// <summary>导入按钮 Key（与 BOS 元数据动态表单按钮一致）</summary>
-        private const string btnOkKey = "F_CustLI_Button_Import";
+        /// <summary>导入（确定）按钮 Key（与 BOS 元数据动态表单按钮一致）</summary>
+        private const string btnOkKey = "F_OKVA_Button_re5";
+
+        /// <summary>取消按钮 Key（与 BOS 元数据动态表单按钮一致，点击关闭弹窗不导入）</summary>
+        private const string btnCancelKey = "F_OKVA_Button_apv";
 
         /// <summary>上传控件 Key（与 BOS 元数据动态表单 HtmlFile 控件一致）</summary>
-        private const string attachUploadKey = "F_CustLI_FileUpdate_Pdf";
+        private const string attachUploadKey = "F_OKVA_FileUpdate_83g";
 
         /// <summary>已上传 PDF 的服务端物理路径集合</summary>
         private readonly List<string> _filePaths = new List<string>();
@@ -94,6 +98,14 @@ namespace kingdee.CustLI.Business.PlugIn
         public override void ButtonClick(ButtonClickEventArgs e)
         {
             base.ButtonClick(e);
+
+            // 取消按钮：关闭弹窗，不执行导入
+            if (e.Key.EqualsIgnoreCase(btnCancelKey))
+            {
+                this.View.Close();
+                return;
+            }
+
             if (!e.Key.EqualsIgnoreCase(btnOkKey)) return;
 
             if (_filePaths.Count == 0)

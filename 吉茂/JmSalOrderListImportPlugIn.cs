@@ -17,11 +17,11 @@ namespace kingdee.CustLI.Business.PlugIn
     [Description("吉茂-销售订单列表导入"), HotUpdate]
     public class JmSalOrderListImportPlugIn : AbstractListPlugIn
     {
-        /// <summary>列表按钮标识（在 BOS 元数据销售订单列表按钮注册）</summary>
-        public const string BarItemImportPdf = "tbImportKonePdf";
+        /// <summary>列表按钮标识（在 BOS 元数据销售订单列表按钮注册，实际值 OKVA_tbButton）</summary>
+        public const string BarItemImportPdf = "OKVA_tbButton";
 
-        /// <summary>上传弹窗动态表单唯一标识（演示环境在 BOS 设计器配置后填入 FormId）</summary>
-        public const string ImportPdfFormId = "Jm_KONE_PdfImportForm";
+        /// <summary>上传弹窗动态表单唯一标识（BOS 设计器配置的 FormId）</summary>
+        public const string ImportPdfFormId = "k294935dab5cb40c6b47bfa0b5108d7ef";
 
         /// <summary>
         /// 列表按钮点击事件：打开上传 PDF 的动态表单。
