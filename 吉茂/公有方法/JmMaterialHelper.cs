@@ -230,6 +230,32 @@ namespace kingdee.CustLI.Business.PlugIn
         }
 
         /// <summary>
+        /// 按名称查询基础资料内码（客户用，PDF Buyer 名称匹配 FNAME）。
+        /// </summary>
+        /// <param name="ctx">上下文</param>
+        /// <param name="tableName">基础资料主表名</param>
+        /// <param name="idField">主键字段名</param>
+        /// <param name="name">名称</param>
+        /// <returns>基础资料内码；未找到返回 0</returns>
+        public static long QueryBaseDataByName(Context ctx, string tableName, string idField, string name)
+        {
+            if (string.IsNullOrEmpty(name)) return 0;
+            string sql = string.Format(
+                @"SELECT a1.{0} AS FID
+                  FROM {1} a1
+                  WHERE a1.FNAME = '{2}'",
+                idField, tableName, name.Replace("'", "''"));
+
+            var dbService = ServiceFactory.GetDBService(ctx);
+            DynamicObjectCollection rows = dbService.ExecuteDynamicObject(ctx, sql);
+            if (rows != null && rows.Count > 0 && rows[0]["FID"] != null)
+            {
+                return Convert.ToInt64(rows[0]["FID"]);
+            }
+            return 0;
+        }
+
+        /// <summary>
         /// 数据包保存：CreateNewBillView 构造单据 → Save → Submit → Audit。
         /// </summary>
         /// <param name="ctx">上下文</param>

@@ -36,6 +36,9 @@ namespace kingdee.CustLI.Business.PlugIn
         /// <summary>客户订单号（Purchase order No.，重复校验用），如 4800761812</summary>
         public string BillNo { get; set; }
 
+        /// <summary>客户名称（Buyer，销售订单客户按名称查内码），如 通力电梯有限公司</summary>
+        public string Customer { get; set; }
+
         /// <summary>订单日期（Date），原始格式 dd.MM.yyyy</summary>
         public string OrderDate { get; set; }
 

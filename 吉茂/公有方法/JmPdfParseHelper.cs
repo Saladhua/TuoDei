@@ -45,6 +45,10 @@ namespace kingdee.CustLI.Business.PlugIn
         private static readonly Regex BillNoPattern =
             new Regex(@"Purchase\s+order\s+No\.?\s*[:]?\s*(\d+)", RegexOptions.IgnoreCase);
 
+        /// <summary>客户名称：Buyer 后的客户名称（中文为主，含中英文/括号，联调按样例 PDF 校准）</summary>
+        private static readonly Regex CustomerPattern =
+            new Regex(@"Buyer\s*[:]?\s*([\u4e00-\u9fa5A-Za-z（）()]{2,60})", RegexOptions.IgnoreCase);
+
         /// <summary>订单日期：Date 20.07.2026（取第一个 Date 后的日期）</summary>
         private static readonly Regex OrderDatePattern =
             new Regex(@"\bDate\s*[:]?\s*(\d{2}\.\d{2}\.\d{4})", RegexOptions.IgnoreCase);
@@ -142,6 +146,9 @@ namespace kingdee.CustLI.Business.PlugIn
         {
             Match m = BillNoPattern.Match(fullText);
             if (m.Success) head.BillNo = m.Groups[1].Value;
+
+            m = CustomerPattern.Match(fullText);
+            if (m.Success) head.Customer = m.Groups[1].Value;
 
             m = OrderDatePattern.Match(fullText);
             if (m.Success) head.OrderDate = m.Groups[1].Value;

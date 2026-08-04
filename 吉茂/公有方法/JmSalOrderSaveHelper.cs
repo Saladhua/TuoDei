@@ -16,7 +16,7 @@ namespace kingdee.CustLI.Business.PlugIn
     ///
     /// 生成流程（数据包保存，用户确认 2026-08-03）：
     ///   1. 重复校验：客户订单号 F_CustLI_BillNo 已存在（非作废）→ 跳过该份
-    ///   2. 基础资料就绪：客户/销售组织/单据类型/销售员/币别/单位 编码查内码
+    ///   2. 基础资料就绪：客户按 PDF Buyer 名称查内码；销售组织/单据类型/销售员/币别 写死编码查内码
     ///   3. 物料就绪：梯号缺失自动建（JmMaterialHelper），组件缺失报错中止
     ///   4. 构造销售订单数据包（CreateNewBillView）→ 表头 + 明细行赋值 → Save/Submit/Audit
     ///
@@ -26,20 +26,17 @@ namespace kingdee.CustLI.Business.PlugIn
     {
         // ==================== 配置区（演示环境需确认真实编码） ====================
 
-        /// <summary>客户编码（通力电梯，演示环境待确认）</summary>
-        public const string CustomerNumber = "KONE";
-
-        /// <summary>销售组织编码（演示环境待确认，默认单组织 100）</summary>
+        /// <summary>销售组织编码（写死值 100）</summary>
         public const string SaleOrgNumber = "100";
 
-        /// <summary>销售订单单据类型编码（默认 XSDD10_SYS）</summary>
-        public const string BillTypeNumber = "XSDD10_SYS";
+        /// <summary>销售订单单据类型编码（写死值 XSDD01_SYS）</summary>
+        public const string BillTypeNumber = "XSDD01_SYS";
 
-        /// <summary>销售员编码（演示环境待确认）</summary>
-        public const string SalerNumber = "0375_SCGL001_1";
+        /// <summary>销售员编码（写死值 0001_GW000001_1）</summary>
+        public const string SalerNumber = "0001_GW000001_1";
 
-        /// <summary>币别编码（PDF CURRENCY 区，如 RMB）</summary>
-        public const string DefaultCurrencyNumber = "RMB";
+        /// <summary>币别编码（写死值 PRE001；PDF CURRENCY 区未取到时使用）</summary>
+        public const string DefaultCurrencyNumber = "PRE001";
 
         /// <summary>销售订单单据标识</summary>
         public const string SaleOrderFormId = "SAL_SaleOrder";
@@ -77,7 +74,7 @@ namespace kingdee.CustLI.Business.PlugIn
             }
 
             // 2. 基础资料内码查询
-            long customerId = QueryBaseDataId(ctx, "T_BD_CUSTOMER", "FCUSTID", CustomerNumber);
+            long customerId = QueryBaseDataByName(ctx, "T_BD_CUSTOMER_L", "FCUSTID", order.Head.Customer);
             long saleOrgId = QueryBaseDataId(ctx, "T_ORG_ORGANIZATIONS", "FORGID", SaleOrgNumber);
             long billTypeId = QueryBaseDataId(ctx, "T_BAS_BILLTYPE", "FID", BillTypeNumber);
             long salerId = QueryBaseDataId(ctx, "T_BD_SALESMAN", "FSALESMANID", SalerNumber);
@@ -89,7 +86,7 @@ namespace kingdee.CustLI.Business.PlugIn
             {
                 result.Message = string.Format(
                     "基础资料编码未配置或未找到（客户 {0}、组织 {1}、单据类型 {2}、销售员 {3}、币别 {4}），请在 JmSalOrderSaveHelper 配置区确认",
-                    CustomerNumber, SaleOrgNumber, BillTypeNumber, SalerNumber, currencyNumber);
+                    order.Head.Customer, SaleOrgNumber, BillTypeNumber, SalerNumber, currencyNumber);
                 return result;
             }
 
@@ -117,17 +114,8 @@ namespace kingdee.CustLI.Business.PlugIn
                 // 财务信息：结算币别
                 view.Model.SetItemValueByID("FSettleCurrId", currencyId.ToString(), 0);
 
-                // 表头自定义字段：客户订单号（重复校验用）/交货条款/合同总额
+                // 表头自定义字段：客户订单号（重复校验用）
                 view.Model.SetValue("F_CustLI_BillNo", billNo);
-                if (!string.IsNullOrEmpty(order.Head.DeliveryTerm))
-                {
-                    view.Model.SetValue("F_CustLI_DeliveryTerm", order.Head.DeliveryTerm);
-                }
-                decimal totalAmount = ParseDecimal(order.Head.CurrencyTotal);
-                if (totalAmount > 0)
-                {
-                    view.Model.SetValue("F_CustLI_TotalAmount", totalAmount);
-                }
 
                 // ---- 明细行（每梯级 1 行）----
                 for (int i = 0; i < order.Tiers.Count; i++)
@@ -167,7 +155,6 @@ namespace kingdee.CustLI.Business.PlugIn
                         CultureInfo.InvariantCulture, DateTimeStyles.None, out deliveryDate))
                     {
                         view.Model.SetValue("FDELIVERYDATE", deliveryDate, row);
-                        view.Model.SetValue("F_CustLI_RequireDate", deliveryDate, row);
                     }
 
                     // 组件字段（主轴/上模组/下模组）
@@ -317,19 +304,16 @@ namespace kingdee.CustLI.Business.PlugIn
         }
 
         /// <summary>
-        /// 金额/数量解析：支持千分位。
+        /// 按名称查询基础资料内码（客户用，PDF Buyer 名称匹配 FNAME）。
         /// </summary>
-        /// <param name="value">原始字符串</param>
-        /// <returns>数值；解析失败返回 0</returns>
-        private static decimal ParseDecimal(string value)
+        /// <param name="ctx">上下文</param>
+        /// <param name="tableName">基础资料主表名</param>
+        /// <param name="idField">主键字段名</param>
+        /// <param name="name">名称</param>
+        /// <returns>基础资料内码；未找到返回 0</returns>
+        private static long QueryBaseDataByName(Context ctx, string tableName, string idField, string name)
         {
-            if (string.IsNullOrWhiteSpace(value)) return 0m;
-            decimal result;
-            if (decimal.TryParse(value, NumberStyles.Any, CultureInfo.InvariantCulture, out result))
-            {
-                return result;
-            }
-            return 0m;
+            return JmMaterialHelper.QueryBaseDataByName(ctx, tableName, idField, name);
         }
 
         /// <summary>
