@@ -45,16 +45,13 @@ namespace kingdee.CustLI.Business.PlugIn
         private static readonly Regex BillNoPattern =
             new Regex(@"Purchase\s+order\s+No\.?\s*[:]?\s*(\d+)", RegexOptions.IgnoreCase);
 
-        /// <summary>通力英文买方名称：PDF 只能抽到英文时，归一为金蝶客户中文名称。</summary>
-        private static readonly Regex KoneCustomerPattern =
-            new Regex(@"KONE\s+Elevators\s+Co\.?\s*,?\s*Ltd\.?", RegexOptions.IgnoreCase);
-
-        /// <summary>客户名称：Buyer 后的中文客户名称（英文买方走配置化归一，避免 Buyer VAT No 误识别）。</summary>
+        /// <summary>客户名称：Buyer 后的中文客户名称（中文优先；无中文时按公司名特征取 PDF 原文，不写死映射）。</summary>
         private static readonly Regex CustomerPattern =
             new Regex(@"Buyer\s*[:]?\s*([\u4e00-\u9fa5（）()]{2,60})", RegexOptions.IgnoreCase);
 
-        /// <summary>通力在金蝶客户基础资料中的中文名称。</summary>
-        private const string KoneCustomerName = "通力电梯有限公司";
+        /// <summary>公司名特征（英文买方原文）：含 Co.,Ltd./Co./Company/Limited 等后缀的公司名，保持 PDF 原文不映射。</summary>
+        private static readonly Regex CompanyNamePattern =
+            new Regex(@"[A-Z][A-Za-z]+(?:\s+[A-Z][A-Za-z]+){1,3}\s+Co\.,?\s*Ltd\.?", RegexOptions.IgnoreCase);
 
         /// <summary>订单日期：Date 20.07.2026（取第一个 Date 后的日期）</summary>
         private static readonly Regex OrderDatePattern =
@@ -174,7 +171,7 @@ namespace kingdee.CustLI.Business.PlugIn
         }
 
         /// <summary>
-        /// 解析客户名称；中文 Buyer 名称优先，英文 KONE 买方名称按金蝶客户 FNAME 归一。
+        /// 解析客户名称：中文 Buyer 名称优先；无中文时按公司名特征取 PDF 原文（不写死映射，查不到客户由保存层提示）。
         /// </summary>
         /// <param name="fullText">全文</param>
         /// <returns>客户名称；取不到返回空串</returns>
@@ -183,9 +180,9 @@ namespace kingdee.CustLI.Business.PlugIn
             Match m = CustomerPattern.Match(fullText);
             if (m.Success) return m.Groups[1].Value.Trim();
 
-            // 样例 PDF 的 Buyer 后先出现 VAT No，客户英文名出现在 Delivery address 区域。
-            m = KoneCustomerPattern.Match(fullText);
-            if (m.Success) return KoneCustomerName;
+            // 样例 PDF 的 Buyer 后先出现 VAT No，客户英文名出现在 Delivery address 区域，按公司名特征提取原文。
+            m = CompanyNamePattern.Match(fullText);
+            if (m.Success) return m.Value.Trim();
 
             return "";
         }
