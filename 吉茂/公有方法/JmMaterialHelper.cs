@@ -211,7 +211,7 @@ namespace kingdee.CustLI.Business.PlugIn
         /// <param name="ctx">上下文</param>
         /// <param name="tableName">基础资料主表名</param>
         /// <param name="idField">主键字段名</param>
-        /// <param name="numberField">编码字段名（销售员用 FStaffNumber，其余用 FNumber）</param>
+        /// <param name="numberField">编码字段名（业务员任职表 T_BD_OPERATORENTRY 用 FNUMBER，其余用 FNumber）</param>
         /// <param name="number">编号</param>
         /// <returns>基础资料内码字符串；未找到返回空串</returns>
         public static string QueryBaseDataId(Context ctx, string tableName, string idField, string numberField, string number)
@@ -256,6 +256,25 @@ namespace kingdee.CustLI.Business.PlugIn
                 return Convert.ToInt64(rows[0]["FID"]);
             }
             return 0;
+        }
+
+        /// <summary>
+        /// 仅保存（不提交/不审核）。销售订单导入使用（用户确认 2026-08-04 只保存）。
+        /// </summary>
+        /// <param name="ctx">上下文</param>
+        /// <param name="view">单据视图</param>
+        /// <param name="formId">单据标识（错误提示用）</param>
+        public static void SaveOnly(Context ctx, IBillView view, string formId)
+        {
+            IOperationResult saveResult = BusinessDataServiceHelper.Save(
+                ctx, view.BillBusinessInfo, view.Model.DataObject,
+                OperateOption.Create(), "Save");
+
+            if (!saveResult.IsSuccess)
+            {
+                var errMsgs = saveResult.ValidationErrors.Select(x => x.Message);
+                throw new Exception(string.Format("{0} 保存失败：{1}", formId, string.Join(",", errMsgs)));
+            }
         }
 
         /// <summary>

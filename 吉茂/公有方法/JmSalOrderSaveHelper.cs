@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
@@ -6,6 +6,7 @@ using Kingdee.BOS;
 using Kingdee.BOS.App;
 using Kingdee.BOS.Contracts;
 using Kingdee.BOS.Core.Bill;
+using Kingdee.BOS.Core.DynamicForm.PlugIn;
 using Kingdee.BOS.Orm.DataEntity;
 using Kingdee.BOS.ServiceHelper;
 
@@ -18,7 +19,10 @@ namespace kingdee.CustLI.Business.PlugIn
     ///   1. 重复校验：客户订单号 F_CustLI_BillNo 已存在（非作废）→ 跳过该份
     ///   2. 基础资料就绪：客户按 PDF Buyer 名称查内码；销售组织/单据类型/销售员/币别 按编码查内码后 SetItemValueByID
     ///   3. 物料就绪：梯号缺失自动建（JmMaterialHelper），组件缺失报错中止
-    ///   4. 构造销售订单数据包（CreateNewBillView）→ 表头 + 明细行赋值 → Save/Submit/Audit
+    ///   4. 构造销售订单数据包（CreateNewBillView）→ 表头 + 明细行赋值 → Save（仅保存）
+    ///
+    /// 引用字段统一用 SetItemValueByID（金蝶内部处理 long/GUID 内码，禁止 long.Parse 手动转换）；
+    /// 明细行号用 CreateNewEntryRow 返回值（从 0 开始），不得用 GetEntryRowCount 前置计数。
     ///
     /// 明细行 = 每梯级 1 行，物料 = 梯号；单价 = 主轴+上模组+下模组金额之和。
     /// </summary>
@@ -41,8 +45,11 @@ namespace kingdee.CustLI.Business.PlugIn
         /// <summary>销售订单单据标识</summary>
         public const string SaleOrderFormId = "SAL_SaleOrder";
 
-        /// <summary>销售订单单据体标识</summary>
+        /// <summary>销售订单单据体实体键（CreateNewEntryRow/GetEntryRowCount 使用，元数据实体键带 F 前缀）</summary>
         public const string SaleOrderEntryKey = "FSaleOrderEntry";
+
+        /// <summary>销售订单单据体集合属性名（DataObject["..."] 使用，不带 F 前缀，见林蓝 2026-07-28 日志）</summary>
+        public const string SaleOrderEntryCollectionKey = "SaleOrderEntry";
 
         // ==================== 保存入口 ====================
 
@@ -92,35 +99,36 @@ namespace kingdee.CustLI.Business.PlugIn
                 // 4. 构造销售订单数据包
                 IBillView view = JmMaterialHelper.CreateNewBillView(ctx, SaleOrderFormId, null);
 
+                // 数据包保存标准模式：必须 FireOnLoad 初始化 DataObject（林蓝样板/skills create-billview-pattern 红线）
+                DynamicFormViewPlugInProxy proxy = view.GetService<DynamicFormViewPlugInProxy>();
+                proxy.FireOnLoad();
+
                 // ---- 表头 ----
-                // 组织/单据类型/销售员/币别：查内码 + SetItemValueByID（基础资料引用字段红线）
+                // 组织/单据类型/销售员/币别：查内码 + SetItemValueByID（基础资料引用字段赋值，金蝶内部处理 long/GUID）
                 string billTypeId = JmMaterialHelper.QueryBaseDataId(ctx, "T_BAS_BILLTYPE", "FBILLTYPEID", "FNumber", BillTypeNumber);
                 string saleOrgId = JmMaterialHelper.QueryBaseDataId(ctx, "T_ORG_ORGANIZATIONS", "FORGID", "FNumber", SaleOrgNumber);
-                string salerId = JmMaterialHelper.QueryBaseDataId(ctx, "T_BD_STAFF", "FSTAFFID", "FStaffNumber", SalerNumber);
+                string salerId = JmMaterialHelper.QueryBaseDataId(ctx, "T_BD_OPERATORENTRY", "FENTRYID", "FNUMBER", SalerNumber);
                 string settleCurrId = JmMaterialHelper.QueryBaseDataId(ctx, "T_BD_CURRENCY", "FCURRENCYID", "FNumber", currencyNumber);
+                // 结算组织 = 销售组织（循环外一次性查询，避免循环内查 DB）
+                string settleOrgId = JmMaterialHelper.QueryBaseDataId(ctx, "T_ORG_ORGANIZATIONS", "FORGID", "FNumber", SaleOrgNumber);
 
                 if (!string.IsNullOrEmpty(billTypeId))
                 {
                     view.Model.SetItemValueByID("FBillTypeID", billTypeId, 0);
-                    view.InvokeFieldUpdateService("FBillTypeID", 0);
                 }
                 if (!string.IsNullOrEmpty(saleOrgId))
                 {
                     view.Model.SetItemValueByID("FSaleOrgId", saleOrgId, 0);
-                    view.InvokeFieldUpdateService("FSaleOrgId", 0);
                 }
                 if (!string.IsNullOrEmpty(salerId))
                 {
                     view.Model.SetItemValueByID("FSalerId", salerId, 0);
-                    view.InvokeFieldUpdateService("FSalerId", 0);
                 }
                 if (!string.IsNullOrEmpty(settleCurrId))
                 {
                     view.Model.SetItemValueByID("FSettleCurrId", settleCurrId, 0);
-                    view.InvokeFieldUpdateService("FSettleCurrId", 0);
                 }
                 view.Model.SetItemValueByID("FCustId", customerId.ToString(), 0);
-                view.InvokeFieldUpdateService("FCustId", 0);
 
                 DateTime orderDate;
                 if (DateTime.TryParseExact(order.Head.OrderDate, "dd.MM.yyyy",
@@ -129,13 +137,21 @@ namespace kingdee.CustLI.Business.PlugIn
                     view.Model.SetValue("FDate", orderDate);
                 }
 
-                // 财务信息：结算币别（查内码 + SetItemValueByID，基础资料引用字段红线）
-                view.Model.SetItemValueByID("FSettleCurrId", settleCurrId, 0);
-
                 // 表头自定义字段：客户订单号（重复校验用）
                 view.Model.SetValue("F_CustLI_BillNo", billNo);
 
+                // 销售订单汇率（必录，用户确认固定 1）
+                view.Model.SetValue("FExchangeRate", 1m);
+
                 // ---- 明细行（每梯级 1 行）----
+                // FireOnLoad 后新增单据预置 1 个空明细行，必须清空，否则 CreateNewEntryRow 后行号从 1 开始，
+                // 第 0 行空行会触发保存必填（SKILL.md:130 entryCol.Clear 标准写法）
+                DynamicObjectCollection entryCol = view.Model.DataObject[SaleOrderEntryCollectionKey] as DynamicObjectCollection;
+                if (entryCol != null)
+                {
+                    entryCol.Clear();
+                }
+
                 for (int i = 0; i < order.Tiers.Count; i++)
                 {
                     JmPdfTier tier = order.Tiers[i];
@@ -146,34 +162,37 @@ namespace kingdee.CustLI.Business.PlugIn
                         throw new Exception(string.Format("梯号 {0} 物料内码为空，无法生成明细", tier.TierNo));
                     }
 
-                    int row = view.Model.GetEntryRowCount(SaleOrderEntryKey);
+                    // CreateNewEntryRow 返回 void；新明细行号 = 创建后 GetEntryRowCount - 1（从 0 开始）
                     view.Model.CreateNewEntryRow(SaleOrderEntryKey);
+                    int row = view.Model.GetEntryRowCount(SaleOrderEntryKey) - 1;
 
                     view.Model.SetItemValueByID("FMATERIALID", materialId.ToString(), row);
-                    view.InvokeFieldUpdateService("FMATERIALID", row);
 
-                    // 结算组织（查内码 + SetItemValueByID，基础资料引用字段红线）
-                    string settleOrgId = JmMaterialHelper.QueryBaseDataId(ctx, "T_ORG_ORGANIZATIONS", "FORGID", "FNumber", SaleOrgNumber);
+                    // 结算组织（基础资料引用字段，SetItemValueByID）
                     if (!string.IsNullOrEmpty(settleOrgId))
                     {
                         view.Model.SetItemValueByID("FSettleOrgIds", settleOrgId, row);
-                        view.InvokeFieldUpdateService("FSettleOrgIds", row);
                     }
 
-                    // 单位（计价单位/单位 = 梯号物料基本单位）
+                    // 单位（计价单位/销售单位/库存单位 = 梯号物料基本单位）
                     long unitId = QueryMaterialBaseUnit(ctx, materialId);
                     if (unitId > 0)
                     {
                         view.Model.SetItemValueByID("FPriceUnitId", unitId.ToString(), row);
-                        view.InvokeFieldUpdateService("FPriceUnitId", row);
                         view.Model.SetItemValueByID("FUnitID", unitId.ToString(), row);
-                        view.InvokeFieldUpdateService("FUnitID", row);
+                        view.Model.SetItemValueByID("FSTOCKUNITID", unitId.ToString(), row);
+                    }
+
+                    // 库存组织（= 销售组织）
+                    if (!string.IsNullOrEmpty(saleOrgId))
+                    {
+                        view.Model.SetItemValueByID("FStockOrgId", saleOrgId, row);
                     }
 
                     view.Model.SetValue("FQTY", 1m, row);
                     view.Model.SetValue("FPRICE", tier.UnitPrice, row);
                     view.Model.SetValue("FTAXPRICE", tier.UnitPrice, row);
-                    view.Model.SetValue("FTAXRATE", 0m, row);
+                    view.Model.SetValue("FEntryTaxRate", 0m, row);
                     view.Model.SetValue("FAMOUNT", tier.UnitPrice, row);
 
                     // 交期/要货日期（取组件行 Arr.date）
@@ -192,8 +211,8 @@ namespace kingdee.CustLI.Business.PlugIn
                     SetTechFields(view, row, order.Head);
                 }
 
-                // 保存 + 提交 + 审核
-                JmMaterialHelper.SaveSubmitAudit(ctx, view, SaleOrderFormId);
+                // 仅保存（不提交/不审核，用户确认 2026-08-04）
+                JmMaterialHelper.SaveOnly(ctx, view, SaleOrderFormId);
 
                 result.Success = true;
                 result.BillNo = ObjectToString(view.Model.DataObject["BillNo"]);
@@ -230,7 +249,7 @@ namespace kingdee.CustLI.Business.PlugIn
         /// 设置明细行组件字段（主轴/上模组/下模组各 5 个字段）。
         /// </summary>
         /// <param name="view">单据视图</param>
-        /// <param name="row">明细行号</param>
+        /// <param name="row">明细行号（从 0 开始）</param>
         /// <param name="tier">梯级</param>
         private static void SetComponentFields(IBillView view, int row, JmPdfTier tier)
         {
@@ -264,7 +283,7 @@ namespace kingdee.CustLI.Business.PlugIn
         /// 设置明细行工艺字段（仅特征明确值；其余 KM 图号工艺值留空，用户确认 2026-08-03）。
         /// </summary>
         /// <param name="view">单据视图</param>
-        /// <param name="row">明细行号</param>
+        /// <param name="row">明细行号（从 0 开始）</param>
         /// <param name="head">单据头（含工艺字段）</param>
         private static void SetTechFields(IBillView view, int row, JmPdfHead head)
         {

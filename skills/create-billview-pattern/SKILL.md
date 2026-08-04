@@ -163,3 +163,18 @@ if (!auditResult.IsSuccess) { /* throw */ }
 | `FormConst` | `Kingdee.BOS.Core.FormConst` | 非 `DynamicForm.PlugIn` |
 | `CreateFrom` | `Kingdee.BOS.Core.Metadata.CreateFrom` | 在 Core.dll |
 | `IResourceServiceProvider` | `Kingdee.BOS.Core.DynamicForm` | 在 Core.dll |
+
+## 明细单据体双 Key（吉茂 2026-08-04 复盘四实证）
+
+`CreateNewEntryRow/GetEntryRowCount` 与 `DataObject["..."]` 使用的是**两个不同的 key**：
+
+| API | 参数类型 | 示例 |
+|---|---|---|
+| `view.Model.CreateNewEntryRow(entryKey)` / `GetEntryRowCount(entryKey)` | 元数据**实体键**（带 F 前缀） | `"FSaleOrderEntry"` |
+| `view.Model.DataObject["..."]`（取明细集合） | **集合属性名**（不带 F 前缀） | `"SaleOrderEntry"` |
+
+禁止把两者当作同一 key：
+- `DataObject["FSaleOrderEntry"]` → 抛"实体类型 SaleOrder 不存在该属性"
+- `CreateNewEntryRow("SaleOrderEntry")` → 抛"未将对象引用设置到对象的实例"（空引用）
+
+推荐拆两个常量分别使用；`DataObject` 的集合属性名以林蓝等实证为准（如销售订单为 `SaleOrderEntry`）。
