@@ -13,8 +13,8 @@ namespace kingdee.CustLI.Business.PlugIn
     /// （组装图、接口等 ASCII 值）全部丢失。经逐字节验证，内容流原始字节含全部关键 ASCII 信息。
     ///
     /// 本类直接读取页面内容流原始字节，按 Tf 当前字体区分解码：
-    ///   - Type0 字体（STSong-Light）：UTF-16BE 解码。该字体下 ASCII 字符高字节为 0，
-    ///     低字节即字符本身，可完整还原值；中文标签无 ToUnicode 无法还原，统一转为空格。
+    ///   - Type0 字体（STSong-Light，UniGB-UTF16-H）：内容流字符串即 UTF-16BE Unicode，
+    ///     可直接还原 ASCII 与中文码点（0x4E00-0x9FFF），无需 ToUnicode CMap。
     ///   - WinAnsi 字体（表头/表格行）：CP1252 单字节解码。
     ///
     /// 输出：按 Tj/TJ/'/" 操作符切分的解码文本片段（保留原始顺序），供 JmPdfParseHelper 关键字正则解析。
@@ -194,8 +194,9 @@ namespace kingdee.CustLI.Business.PlugIn
         }
 
         /// <summary>
-        /// 按当前字体区分解码字符串字节，并清洗为纯可打印 ASCII（乱码/中文 CID 统一转为空格）。
-        /// 清洗后中文标签不可用，但关键 ASCII 值（图号/数字/工艺值）完整保留，供正则匹配。
+        /// 按当前字体区分解码字符串字节：
+        /// Type0（UniGB-UTF16-H）保留 CJK 中文码点与可打印 ASCII；WinAnsi 仅保留可打印 ASCII。
+        /// 中文客户名/工艺标签可完整还原，供关键字正则匹配。
         /// </summary>
         /// <param name="bytes">字符串原始字节</param>
         /// <param name="fontType0Map">字体名到是否 Type0 的映射</param>
@@ -221,17 +222,36 @@ namespace kingdee.CustLI.Business.PlugIn
                 decoded = Encoding.GetEncoding(1252).GetString(bytes);
             }
 
-            // 仅保留可打印 ASCII（空格保留），其余字符统一转为空格
             StringBuilder sb = new StringBuilder(decoded.Length);
-            foreach (char c in decoded)
+            if (isType0)
             {
-                if (c == ' ' || (c >= 0x20 && c <= 0x7E))
+                // Type0（UniGB-UTF16-H）内容流字符串即 UTF-16BE Unicode：
+                // 保留空格、可打印 ASCII 与 CJK 中文码点（0x4E00-0x9FFF），其余（控制符等）统一转为空格。
+                foreach (char c in decoded)
                 {
-                    sb.Append(c);
+                    if (c == ' ' || (c >= 0x20 && c <= 0x7E) || (c >= 0x4E00 && c <= 0x9FFF))
+                    {
+                        sb.Append(c);
+                    }
+                    else
+                    {
+                        sb.Append(' ');
+                    }
                 }
-                else
+            }
+            else
+            {
+                // WinAnsi 单字节字体：仅保留可打印 ASCII（空格保留），其余字符统一转为空格。
+                foreach (char c in decoded)
                 {
-                    sb.Append(' ');
+                    if (c == ' ' || (c >= 0x20 && c <= 0x7E))
+                    {
+                        sb.Append(c);
+                    }
+                    else
+                    {
+                        sb.Append(' ');
+                    }
                 }
             }
             return sb.ToString();

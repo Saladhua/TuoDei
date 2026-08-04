@@ -45,9 +45,9 @@ namespace kingdee.CustLI.Business.PlugIn
         private static readonly Regex BillNoPattern =
             new Regex(@"Purchase\s+order\s+No\.?\s*[:]?\s*(\d+)", RegexOptions.IgnoreCase);
 
-        /// <summary>客户名称：Buyer 后的中文客户名称（中文优先；无中文时按公司名特征取 PDF 原文，不写死映射）。</summary>
+        /// <summary>客户名称：Invoicing address 标签后紧跟的中文客户名称（中文优先；无中文时按公司名特征取 PDF 原文，不写死映射）。</summary>
         private static readonly Regex CustomerPattern =
-            new Regex(@"Buyer\s*[:]?\s*([\u4e00-\u9fa5（）()]{2,60})", RegexOptions.IgnoreCase);
+            new Regex(@"Invoicing\s+address\s*[:]?\s*([\u4e00-\u9fa5（）()]{2,60})", RegexOptions.IgnoreCase);
 
         /// <summary>公司名特征（英文买方原文）：含 Co.,Ltd./Co./Company/Limited 等后缀的公司名，保持 PDF 原文不映射。</summary>
         private static readonly Regex CompanyNamePattern =
@@ -171,7 +171,7 @@ namespace kingdee.CustLI.Business.PlugIn
         }
 
         /// <summary>
-        /// 解析客户名称：中文 Buyer 名称优先；无中文时按公司名特征取 PDF 原文（不写死映射，查不到客户由保存层提示）。
+        /// 解析客户名称：Invoicing address 标签后的中文客户名称优先；无中文时按公司名特征取 PDF 原文（不写死映射，查不到客户由保存层提示）。
         /// </summary>
         /// <param name="fullText">全文</param>
         /// <returns>客户名称；取不到返回空串</returns>
@@ -180,7 +180,7 @@ namespace kingdee.CustLI.Business.PlugIn
             Match m = CustomerPattern.Match(fullText);
             if (m.Success) return m.Groups[1].Value.Trim();
 
-            // 样例 PDF 的 Buyer 后先出现 VAT No，客户英文名出现在 Delivery address 区域，按公司名特征提取原文。
+            // 样例 PDF 客户名位于 Invoicing address 区域；无中文时客户英文名出现在 Delivery address 区域，按公司名特征提取原文。
             m = CompanyNamePattern.Match(fullText);
             if (m.Success) return m.Value.Trim();
 
