@@ -16,25 +16,25 @@ using Kingdee.BOS.Util;
 namespace kingdee.CustLI.Business.PlugIn
 {
     /// <summary>
-    /// 吉茂-销售订单下推生产订单，携带工艺要求到生产订单明细行 FMEMO 转换插件
+    /// 吉茂-销售订单下推生产订单，携带工艺要求到生产订单明细行 MEMO 转换插件
     ///
     /// 触发：销售订单 → 生产订单（下推/转换），挂转换规则（&lt;ConvertPlugins&gt;），服务端执行。
     /// 逻辑（用户确认 2026-08-05）：
     ///   下推时，读取销售订单明细行工艺组件字段（14 个，用户确认已存在于销售订单），
     ///   仅取非空值，按 "字段名:值" 每项一行拼接为一个文本，
-    ///   写入目标生产订单明细行 FMEMO 字段。
+    ///   写入目标生产订单明细行 MEMO 字段。
     ///
     /// 字段标识为拟定占位（F_CustLI_ 前缀，见配置区），待用户提供实际标识后替换。
     /// 数据获取：AfterConvert 中通过目标单 Link 关联收集源分录内码，SQL 批量查销售订单明细工艺字段
-    ///   （避免循环内查 DB），再按源分录内码匹配写入目标明细行 FMEMO。
+    ///   （避免循环内查 DB），再按源分录内码匹配写入目标明细行 MEMO。
     /// </summary>
     [Description("吉茂-销售订单下推生产订单携带工艺要求"), HotUpdate]
     public class JmSalOrderToProdOrderConvertPlugIn : AbstractConvertPlugIn
     {
         // ==================== 配置区（字段标识为拟定占位，待用户提供实际值后替换） ====================
 
-        /// <summary>目标生产订单明细行备注字段标识（用户确认 FMEMO，待演示环境核验）</summary>
-        private const string TargetMemoFieldKey = "FMEMO";
+        /// <summary>目标生产订单明细行备注字段标识（标准字段，ORM 属性名去 F = MEMO，用户确认 2026-08-05）</summary>
+        private const string TargetMemoFieldKey = "MEMO";
 
         /// <summary>工艺组件字段清单：[字段标识, 中文名]，仅已注册列（RegisteredTechColumns）且非空值参与拼接</summary>
         /// 主轴/下部 映射到销售订单已存在字段（F_CUSTLI_AXISCODE 主轴图号 / F_CUSTLI_DOWNCODE 下模组料号）；
@@ -66,7 +66,7 @@ namespace kingdee.CustLI.Business.PlugIn
         };
 
         /// <summary>
-        /// 转换完成后，将销售订单明细工艺组件字段汇总写入生产订单明细行 FMEMO。
+        /// 转换完成后，将销售订单明细工艺组件字段汇总写入生产订单明细行 MEMO。
         /// </summary>
         /// <param name="e">转换事件参数</param>
         public override void AfterConvert(AfterConvertEventArgs e)
@@ -124,7 +124,7 @@ namespace kingdee.CustLI.Business.PlugIn
             // SQL 批量查源销售订单明细工艺字段（源分录内码集合）
             Dictionary<long, string> dctSrcSIdToMemo = QuerySrcTechMemo(e, srcSIds);
 
-            // 遍历目标行，按源分录内码匹配写入 FMEMO
+            // 遍历目标行，按源分录内码匹配写入 MEMO
             foreach (var item in dctIndexToSrcSId)
             {
                 DynamicObject targetEntry = entryRows[item.Key].DataEntity;
