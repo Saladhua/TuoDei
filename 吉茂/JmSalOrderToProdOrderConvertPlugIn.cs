@@ -36,14 +36,17 @@ namespace kingdee.CustLI.Business.PlugIn
         /// <summary>目标生产订单明细行备注字段标识（用户确认 FMEMO，待演示环境核验）</summary>
         private const string TargetMemoFieldKey = "FMEMO";
 
-        /// <summary>工艺组件字段清单：[字段标识, 中文名]，仅非空值参与拼接</summary>
+        /// <summary>工艺组件字段清单：[字段标识, 中文名]，仅已注册列（RegisteredTechColumns）且非空值参与拼接</summary>
+        /// 主轴/下部 映射到销售订单已存在字段（F_CUSTLI_AXISCODE 主轴图号 / F_CUSTLI_DOWNCODE 下模组料号）；
+        /// 其余 12 个（上部/3D模组/链条/主轴组件/梯级链轮×2/驱动链轮×2/扶手轴组件/轴/制动器/抱闸拉杆）
+        /// 在 T_SAL_ORDERENTRY 无对应列（实测 2026-08-05），保留占位但值为空，不参与 SQL 与拼接。
         private static readonly string[,] TechFieldMap = new string[,]
         {
             { "F_CustLI_UpperPart", "上部" },
             { "F_CustLI_3DModule", "3D模组" },
             { "F_CustLI_Chain", "链条" },
             { "F_CustLI_AxisAssy", "主轴组件" },
-            { "F_CustLI_Axis", "主轴" },
+            { "F_CUSTLI_AXISCODE", "主轴" },
             { "F_CustLI_StepSprocket", "梯级链轮" },
             { "F_CustLI_StepSprocketNonStd", "梯级链轮(非标)" },
             { "F_CustLI_DriveSprocket", "驱动链轮" },
@@ -52,7 +55,14 @@ namespace kingdee.CustLI.Business.PlugIn
             { "F_CustLI_Shaft", "轴" },
             { "F_CustLI_Brake", "制动器" },
             { "F_CustLI_BrakeRod", "抱闸拉杆" },
-            { "F_CustLI_LowerPart", "下部" }
+            { "F_CUSTLI_DOWNCODE", "下部" }
+        };
+
+        /// <summary>T_SAL_ORDERENTRY 中真实存在（已注册）的工艺列标识白名单，仅白名单列参与 SQL SELECT 与取值</summary>
+        private static readonly HashSet<string> RegisteredTechColumns = new HashSet<string>
+        {
+            "F_CUSTLI_AXISCODE",
+            "F_CUSTLI_DOWNCODE"
         };
 
         /// <summary>
@@ -146,12 +156,16 @@ namespace kingdee.CustLI.Business.PlugIn
             Dictionary<long, string> map = new Dictionary<long, string>();
             if (srcSIds.Count == 0) return map;
 
-            // 拼 SELECT 字段列表（源明细表别名 a1）
+            // 拼 SELECT 字段列表（源明细表别名 a1）；仅白名单中的真实已注册列参与，避免引用不存在的列报 207
             StringBuilder selectFields = new StringBuilder();
+            bool hasSelect = false;
             for (int i = 0; i < TechFieldMap.GetLength(0); i++)
             {
-                if (i > 0) selectFields.Append(",");
-                selectFields.Append("a1.").Append(TechFieldMap[i, 0]);
+                string fieldKey = TechFieldMap[i, 0];
+                if (!RegisteredTechColumns.Contains(fieldKey)) continue;
+                if (hasSelect) selectFields.Append(",");
+                selectFields.Append("a1.").Append(fieldKey);
+                hasSelect = true;
             }
 
             string ids = string.Join(",", srcSIds.ToArray());
@@ -172,6 +186,8 @@ namespace kingdee.CustLI.Business.PlugIn
                 for (int i = 0; i < TechFieldMap.GetLength(0); i++)
                 {
                     string fieldKey = TechFieldMap[i, 0];
+                    // 仅白名单中的真实已注册列参与拼接；否则字段无值（留空不显示）
+                    if (!RegisteredTechColumns.Contains(fieldKey)) continue;
                     string name = TechFieldMap[i, 1];
                     string value = ObjectToString(row[fieldKey]);
                     if (string.IsNullOrEmpty(value)) continue;

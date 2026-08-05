@@ -244,11 +244,11 @@ namespace kingdee.CustLI.Business.PlugIn
             string sql = string.Format(
                 @"SELECT b.FMATERIALID AS FMaterialId
                         ,ch.FSEQ AS FSEQ
-                        ,ch.FMATERIALIDCHILD AS FChildMaterialId
+                        ,ch.FMATERIALID AS FChildMaterialId
                         ,ch.FQTY AS FQty
                         ,child.FNUMBER AS FNumber
                         ,childName.FNAME AS FName
-                        ,child.FSPECIFICATION AS FSpecification
+                        ,childName.FSPECIFICATION AS FSpecification
                         ,child.F_CustLI_Material AS F_CustLI_Material
                         ,unit.FNUMBER AS FUnitNumber
                         ,ch.F_CustLI_Process1 AS FP1
@@ -263,11 +263,11 @@ namespace kingdee.CustLI.Business.PlugIn
                         ,ch.F_CustLI_BomNote AS FNote
                   FROM T_ENG_BOM b
                   INNER JOIN T_ENG_BOMCHILD ch ON ch.FBOMID = b.FID
-                  INNER JOIN T_BD_MATERIAL child ON child.FMATERIALID = ch.FMATERIALIDCHILD
+                  INNER JOIN T_BD_MATERIAL child ON child.FMATERIALID = ch.FMATERIALID
                   LEFT JOIN T_BD_MATERIAL_L childName
                              ON childName.FMATERIALID = child.FMATERIALID
                             AND childName.FLOCALEID = {0}
-                  LEFT JOIN T_BD_UNIT unit ON unit.FUNITID = ch.FCHILDUNITID
+                  LEFT JOIN T_BD_UNIT unit ON unit.FUNITID = ch.FUNITID
                   WHERE b.FMATERIALID IN ({1})
                     AND b.FDOCUMENTSTATUS IN ('A','C')
                   ORDER BY b.FMATERIALID, ch.FSEQ",
