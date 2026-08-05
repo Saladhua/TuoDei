@@ -51,7 +51,7 @@ namespace kingdee.CustLI.Business.PlugIn
 
                     foreach (DynamicObject entry in entryCol)
                     {
-                        string tierNo = GetMaterialNumber(entry["FMaterialId"]);
+                        string tierNo = GetMaterialNumber(entry["MaterialId"]);
                         if (string.IsNullOrEmpty(tierNo)) continue;
 
                         if (!tierChildren.ContainsKey(tierNo)) tierChildren[tierNo] = new List<string>();
