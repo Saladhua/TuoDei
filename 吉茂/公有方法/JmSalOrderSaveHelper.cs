@@ -192,6 +192,8 @@ namespace kingdee.CustLI.Business.PlugIn
                     view.Model.SetValue("FQTY", 1m, row);
                     view.Model.SetValue("FBaseUnitQty", 1m, row);    // 销售基本数量 = 销售数量（演示环境基本单位=销售单位，换算 1:1，避免下推生产订单因基本数量为0被拦）
                     view.Model.SetValue("FPRICEUNITQTY", 1m, row);   // 计价数量 = 销售数量
+                    view.Model.SetValue("FPRICEBASEQTY", 1m, row);   // 计价基本数量 = 销售数量
+                    view.Model.SetValue("FSTOCKBASEQTY", 1m, row);   // 库存基本数量 = 销售数量
                     view.Model.SetValue("FPRICE", tier.UnitPrice, row);
                     view.Model.SetValue("FTAXPRICE", tier.UnitPrice, row);
                     view.Model.SetValue("FEntryTaxRate", 0m, row);
