@@ -50,8 +50,11 @@ namespace kingdee.CustLI.Business.PlugIn
         /// <summary>BOM 用途（通用）</summary>
         public const string BomUse = "通用";
 
-        /// <summary>BOM 子项实体键（CreateNewEntryRow/GetEntryRowCount 使用；BOM 树实体键为 FTreeEntity）</summary>
+        /// <summary>BOM 子项实体键（CreateNewEntryRow/GetEntryRowCount 使用；元数据实体键带 F，FTreeEntity）</summary>
         public const string BomEntryKey = "FTreeEntity";
+
+        /// <summary>BOM 子项 ORM 集合属性名（DataObject["..."] 取集合使用，不带 F，TreeEntity；实证：销售订单 SaleOrderEntryKey/SaleOrderEntryCollectionKey 双 Key）</summary>
+        public const string BomEntryCollectionKey = "TreeEntity";
 
         /// <summary>
         /// 判断父项物料是否已存在有效 BOM（保存/已审核，非作废）。
@@ -121,7 +124,8 @@ namespace kingdee.CustLI.Business.PlugIn
 
             // ---- 子项（FTreeEntity）----
             // FireOnLoad 后新增单据预置 1 个空子项行，必须清空，否则 CreateNewEntryRow 后行号从 1 开始
-            DynamicObjectCollection entryCol = view.Model.DataObject[BomEntryKey] as DynamicObjectCollection;
+            // DataObject 取集合用 ORM 集合属性名（不带 F，BomEntryCollectionKey）
+            DynamicObjectCollection entryCol = view.Model.DataObject[BomEntryCollectionKey] as DynamicObjectCollection;
             if (entryCol != null)
             {
                 entryCol.Clear();
