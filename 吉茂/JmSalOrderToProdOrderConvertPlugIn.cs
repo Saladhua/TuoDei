@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.ComponentModel;
 using System.Linq;
 using System.Text;
 using Kingdee.BOS;
@@ -10,6 +11,7 @@ using Kingdee.BOS.Core.Metadata.ConvertElement.PlugIn.Args;
 using Kingdee.BOS.Core.Metadata.EntityElement;
 using Kingdee.BOS.Orm.DataEntity;
 using Kingdee.BOS.ServiceHelper;
+using Kingdee.BOS.Util;
 
 namespace kingdee.CustLI.Business.PlugIn
 {
@@ -26,7 +28,7 @@ namespace kingdee.CustLI.Business.PlugIn
     /// 数据获取：AfterConvert 中通过目标单 Link 关联收集源分录内码，SQL 批量查销售订单明细工艺字段
     ///   （避免循环内查 DB），再按源分录内码匹配写入目标明细行 FMEMO。
     /// </summary>
-    [System.ComponentModel.Description("吉茂-销售订单下推生产订单携带工艺要求")]
+    [Description("吉茂-销售订单下推生产订单携带工艺要求"), HotUpdate]
     public class JmSalOrderToProdOrderConvertPlugIn : AbstractConvertPlugIn
     {
         // ==================== 配置区（字段标识为拟定占位，待用户提供实际值后替换） ====================

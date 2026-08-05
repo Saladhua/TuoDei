@@ -1,9 +1,11 @@
 using System;
 using System.Collections.Generic;
+using System.ComponentModel;
 using Kingdee.BOS;
 using Kingdee.BOS.Core.DynamicForm.PlugIn;
 using Kingdee.BOS.Core.DynamicForm.PlugIn.Args;
 using Kingdee.BOS.Orm.DataEntity;
+using Kingdee.BOS.Util;
 
 namespace kingdee.CustLI.Business.PlugIn
 {
@@ -19,7 +21,7 @@ namespace kingdee.CustLI.Business.PlugIn
     ///   （JmSalOrderSaveHelper.SetComponentFields 已写入）。
     /// 性能：循环外一次性批量查料号→物料内码（JmMaterialHelper.BatchQueryMaterialIds，避免循环内查 DB）。
     /// </summary>
-    [System.ComponentModel.Description("吉茂-销售订单审核时生成物料清单(BOM)")]
+    [Description("吉茂-销售订单审核时生成物料清单(BOM)"), HotUpdate]
     public class JmSalOrderAuditCreateBomPlugIn : AbstractOperationServicePlugIn
     {
         public override void OnPreparePropertys(PreparePropertysEventArgs e)

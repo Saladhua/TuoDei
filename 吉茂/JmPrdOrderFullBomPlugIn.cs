@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.ComponentModel;
 using System.Linq;
 using Kingdee.BOS;
 using Kingdee.BOS.App;
@@ -8,6 +9,7 @@ using Kingdee.BOS.Core.Bill.PlugIn;
 using Kingdee.BOS.Core.DynamicForm.PlugIn.Args;
 using Kingdee.BOS.Orm.DataEntity;
 using Kingdee.BOS.ServiceHelper;
+using Kingdee.BOS.Util;
 
 namespace kingdee.CustLI.Business.PlugIn
 {
@@ -29,7 +31,7 @@ namespace kingdee.CustLI.Business.PlugIn
     ///
     /// 递归查 BOM：逐层批量查 T_ENG_BOM 子项（每层一次 SQL，字典缓存，避免循环内查 DB）。
     /// </summary>
-    [System.ComponentModel.Description("吉茂-生产订单完整BOM页签")]
+    [Description("吉茂-生产订单完整BOM页签"), HotUpdate]
     public class JmPrdOrderFullBomPlugIn : AbstractBillPlugIn
     {
         // ==================== 配置区（BOS 标识拟定占位，待用户提供实际值后替换） ====================
