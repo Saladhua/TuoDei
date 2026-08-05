@@ -155,6 +155,14 @@ namespace kingdee.CustLI.Business.PlugIn
                 view.Model.SetValue("FDENOMINATOR", 1m, row);
                 view.Model.SetValue("FEFFECTDATE", DateTime.Now, row);
                 view.Model.SetValue("FISSUETYPE", "直接领料", row);
+
+                // 货主（必填，用户提供 2026-08-05）：货主类型=业务组织 BD_OwnerOrg（varchar 直传），
+                // 货主=组织 100 基础资料内码（复用表头 orgId，避免循环内查 DB）
+                view.Model.SetValue("FOWNERTYPEID", "BD_OwnerOrg", row);
+                if (!string.IsNullOrEmpty(orgId))
+                {
+                    view.Model.SetItemValueByID("FOWNERID", orgId, row);
+                }
             }
 
             // 保存 + 提交 + 审核（用户确认 2026-08-05）
