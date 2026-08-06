@@ -5,6 +5,7 @@ using System.Linq;
 using Kingdee.BOS;
 using Kingdee.BOS.App;
 using Kingdee.BOS.Contracts;
+using Kingdee.BOS.Core.Bill;
 using Kingdee.BOS.Core.Bill.PlugIn;
 using Kingdee.BOS.Core.DynamicForm.PlugIn.Args;
 using Kingdee.BOS.Orm.DataEntity;
@@ -19,15 +20,20 @@ namespace kingdee.CustLI.Business.PlugIn
     /// 生产订单首页画一个页签（明细的子行子表），母项 = 生产订单明细行物料（梯号）。
     /// 页签上有按钮"BOM整体展示"，点击后按母项物料递归查询物料清单（BOM）数据并填充页签。
     ///
-    /// 页签子表元数据（用户提供 2026-08-05）：
-    ///   子表 ORM 实体名  OKVA_Cust_Entry100031（DataObject 取集合用，父级 TreeEntity 树节点）；CreateNewEntryRow/GetEntryRowCount 用实体键 F_OKVA_SubEntity_83g（双 Key）
-    ///   物理表名  OKVA_t_Cust_Entry100031，分录主键 FBOSEntryID
-    ///   父分录    = 生产订单明细（母项 = 明细行物料）
-    ///   按钮事件  EntryBarItemClick（明细行按钮）
+/// 页签子表元数据（用户提供 2026-08-05/06）：
+    ///   子表实体键  F_OKVA_SubEntity_83g（CreateNewEntryRow/GetEntryRowCount/DeleteEntryRow 用）
+    ///   物理表名    OKVA_t_Cust_Entry100031，分录主键 FBOSEntryID
+    ///   父分录      = 生产订单明细 MOEntry（活动行，母项 = 明细行物料）
+    ///   按钮事件    EntryBarItemClick（明细行按钮）
     ///
     /// 页签字段（序号=物料清单自身序号/层级，用户确认）：
     /// 序号、图号、名称、数量、单位、材质、材料规格、工序1-8、生产部门、备注。
+    /// 数量 = BOM 子项分子 FNUMERATOR（用户确认 2026-08-06）。
     /// BOS 字段标识为拟定占位（F_CustLI_ 前缀，配置区），待用户提供实际标识后替换。
+    ///
+    /// 填充流程（2026-08-06 用户确认）：点击按钮 → 先 DeleteEntryRow 清空该明细行整棵 BOM 子表
+    /// （含默认预置空行，避免连续点按钮累积）→ CreateNewEntryRow+SetValue 填充 → Model.Save() 保存。
+    /// 页签挂在生产订单明细 MOEntry 行下，非独立树实体。
     ///
     /// 可选列：材质 / 生产部门 / 备注 三列在物料清单暂未注册（2026-08-06 用户确认），
     /// 由 JmBomQueryHelper.EnableOptionalColumns 开关控制，未注册时 SQL 不引用、填充跳过，避免无效列名 207。
@@ -39,11 +45,8 @@ namespace kingdee.CustLI.Business.PlugIn
     {
         // ==================== 配置区（BOS 标识拟定占位，待用户提供实际值后替换） ====================
 
-        /// <summary>页签子表实体键（CreateNewEntryRow/GetEntryRowCount 用，元数据实体键）</summary>
+        /// <summary>页签子表实体键（CreateNewEntryRow/GetEntryRowCount/DeleteEntryRow 用，元数据实体键）</summary>
         private const string BomSubEntryKey = "F_OKVA_SubEntity_83g";
-
-        /// <summary>页签子表 ORM 集合属性名（DataObject["..."] 取集合用，父级为 TreeEntity 树节点，实证双 Key）</summary>
-        private const string BomSubEntryCollectionKey = "OKVA_Cust_Entry100031";
 
         /// <summary>按钮标识（明细行上的"BOM整体展示"按钮，事件 EntryBarItemClick）</summary>
         private const string BomButtonKey = "ButtonClick";
@@ -93,6 +96,9 @@ namespace kingdee.CustLI.Business.PlugIn
             }
 
             FillSubEntity(rows);
+
+            // 保存（对齐益讯/林蓝实证：填充后必须 Save，否则不落库）
+            ((IBillView)this.View).Model.Save();
         }
 
         /// <summary>
@@ -138,28 +144,18 @@ namespace kingdee.CustLI.Business.PlugIn
         }
 
         /// <summary>
-        /// 将展开结果填充到页签子表。
-        /// 先清空旧数据，再逐行 CreateNewEntryRow + SetValue（沿用双 Key 实证模式）。
+        /// 将展开结果填充到页签子表（生产订单 MOEntry 明细行下的子表）。
+        /// 先清空该子表全部旧行（含默认预置空行），再逐行 CreateNewEntryRow + SetValue。
         /// </summary>
         /// <param name="rows">展开的 BOM 行集合</param>
         private void FillSubEntity(List<BomRow> rows)
         {
-            // 清空旧数据（子表集合直接 Clear）。
-            // OKVA_Cust_Entry100031 是 TreeEntity 树实体下的子表（父子关系）；
-            // DataObject["TreeEntity"] 为树节点集合（实测 Count=2），遍历取第一个含子表的节点
-            DynamicObjectCollection treeEntities = this.Model.DataObject["TreeEntity"] as DynamicObjectCollection;
-            DynamicObjectCollection subEntity = null;
-            if (treeEntities != null)
+            // 清空当前 BOM 子表完整旧数据（避免连续点按钮累积/错位）。
+            // 子表默认预置 1 空行，需一并删空，再重新创建填充。
+            int oldCount = this.Model.GetEntryRowCount(BomSubEntryKey);
+            for (int i = oldCount - 1; i >= 0; i--)
             {
-                foreach (DynamicObject treeEntity in treeEntities)
-                {
-                    subEntity = treeEntity[BomSubEntryCollectionKey] as DynamicObjectCollection;
-                    if (subEntity != null) break;
-                }
-            }
-            if (subEntity != null)
-            {
-                subEntity.Clear();
+                this.Model.DeleteEntryRow(BomSubEntryKey, i);
             }
 
             foreach (BomRow row in rows)
@@ -284,7 +280,7 @@ namespace kingdee.CustLI.Business.PlugIn
                 @"SELECT b.FMATERIALID AS FMaterialId
                         ,ch.FSEQ AS FSEQ
                         ,ch.FMATERIALID AS FChildMaterialId
-                        ,ch.FQTY AS FQty
+                        ,ch.FNUMERATOR AS FQty
                         ,child.FNUMBER AS FNumber
                         ,childName.FNAME AS FName
                         ,childName.FSPECIFICATION AS FSpecification
