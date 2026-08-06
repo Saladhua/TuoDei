@@ -141,8 +141,10 @@ namespace kingdee.CustLI.Business.PlugIn
         /// <param name="rows">展开的 BOM 行集合</param>
         private void FillSubEntity(List<BomRow> rows)
         {
-            // 清空旧数据（子表集合直接 Clear）
-            DynamicObjectCollection subEntity = this.Model.DataObject[BomSubEntityKey] as DynamicObjectCollection;
+            // 清空旧数据（子表集合直接 Clear）。
+            // OKVA_Cust_Entry100031 是 TreeEntity 树实体下的子表（父子关系），从树实体取集合
+            DynamicObject treeEntity = this.Model.DataObject["TreeEntity"] as DynamicObject;
+            DynamicObjectCollection subEntity = treeEntity == null ? null : treeEntity[BomSubEntityKey] as DynamicObjectCollection;
             if (subEntity != null)
             {
                 subEntity.Clear();
