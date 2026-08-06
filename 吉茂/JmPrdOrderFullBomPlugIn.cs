@@ -284,7 +284,7 @@ namespace kingdee.CustLI.Business.PlugIn
                         ,ch.F_CustLI_Process8 AS FP8
                         {2}
                   FROM T_ENG_BOM b
-                  INNER JOIN T_ENG_BOMCHILD ch ON ch.FBOMID = b.FID
+                  INNER JOIN T_ENG_BOMCHILD ch ON ch.FID = b.FID
                   INNER JOIN T_BD_MATERIAL child ON child.FMATERIALID = ch.FMATERIALID
                   LEFT JOIN T_BD_MATERIAL_L childName
                              ON childName.FMATERIALID = child.FMATERIALID
