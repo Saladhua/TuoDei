@@ -142,9 +142,18 @@ namespace kingdee.CustLI.Business.PlugIn
         private void FillSubEntity(List<BomRow> rows)
         {
             // 清空旧数据（子表集合直接 Clear）。
-            // OKVA_Cust_Entry100031 是 TreeEntity 树实体下的子表（父子关系），从树实体取集合
-            DynamicObject treeEntity = this.Model.DataObject["TreeEntity"] as DynamicObject;
-            DynamicObjectCollection subEntity = treeEntity == null ? null : treeEntity[BomSubEntityKey] as DynamicObjectCollection;
+            // OKVA_Cust_Entry100031 是 TreeEntity 树实体下的子表（父子关系）；
+            // DataObject["TreeEntity"] 为树节点集合（实测 Count=2），遍历取第一个含子表的节点
+            DynamicObjectCollection treeEntities = this.Model.DataObject["TreeEntity"] as DynamicObjectCollection;
+            DynamicObjectCollection subEntity = null;
+            if (treeEntities != null)
+            {
+                foreach (DynamicObject treeEntity in treeEntities)
+                {
+                    subEntity = treeEntity[BomSubEntityKey] as DynamicObjectCollection;
+                    if (subEntity != null) break;
+                }
+            }
             if (subEntity != null)
             {
                 subEntity.Clear();
