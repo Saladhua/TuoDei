@@ -181,6 +181,7 @@ namespace kingdee.CustLI.Business.PlugIn
                         view.Model.SetItemValueByID("FPriceUnitId", unitId.ToString(), row);
                         view.Model.SetItemValueByID("FUnitID", unitId.ToString(), row);
                         view.Model.SetItemValueByID("FSTOCKUNITID", unitId.ToString(), row);
+                        view.Model.SetItemValueByID("FBaseUnitId", unitId.ToString(), row);
                     }
 
                     // 库存组织（= 销售组织）
