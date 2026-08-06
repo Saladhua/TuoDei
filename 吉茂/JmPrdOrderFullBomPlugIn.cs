@@ -20,10 +20,10 @@ namespace kingdee.CustLI.Business.PlugIn
     /// 页签上有按钮"BOM整体展示"，点击后按母项物料递归查询物料清单（BOM）数据并填充页签。
     ///
     /// 页签子表元数据（用户提供 2026-08-05）：
-    ///   子表标识  F_OKVA_SubEntity_83g（CreateNewEntryRow 用实体键）
+    ///   子表 ORM 实体名  OKVA_Cust_Entry100031（CreateNewEntryRow / DataObject 取集合用，即 BomSubEntityKey）
     ///   物理表名  OKVA_t_Cust_Entry100031，分录主键 FBOSEntryID
     ///   父分录    = 生产订单明细（母项 = 明细行物料）
-    ///   按钮事件  ButtonClick
+    ///   按钮事件  EntryBarItemClick（明细行按钮）
     ///
     /// 页签字段（序号=物料清单自身序号/层级，用户确认）：
     /// 序号、图号、名称、数量、单位、材质、材料规格、工序1-8、生产部门、备注。
@@ -40,7 +40,7 @@ namespace kingdee.CustLI.Business.PlugIn
         // ==================== 配置区（BOS 标识拟定占位，待用户提供实际值后替换） ====================
 
         /// <summary>页签子表标识（CreateNewEntryRow 实体键 / DataObject 取集合）</summary>
-        private const string BomSubEntityKey = "F_OKVA_SubEntity_83g";
+        private const string BomSubEntityKey = "OKVA_Cust_Entry100031";
 
         /// <summary>按钮标识（明细行上的"BOM整体展示"按钮，事件 EntryBarItemClick）</summary>
         private const string BomButtonKey = "ButtonClick";
