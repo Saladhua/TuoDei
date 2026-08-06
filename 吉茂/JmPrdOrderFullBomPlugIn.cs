@@ -20,7 +20,7 @@ namespace kingdee.CustLI.Business.PlugIn
     /// 页签上有按钮"BOM整体展示"，点击后按母项物料递归查询物料清单（BOM）数据并填充页签。
     ///
     /// 页签子表元数据（用户提供 2026-08-05）：
-    ///   子表 ORM 实体名  OKVA_Cust_Entry100031（CreateNewEntryRow / DataObject 取集合用，即 BomSubEntityKey）
+    ///   子表 ORM 实体名  OKVA_Cust_Entry100031（DataObject 取集合用，父级 TreeEntity 树节点）；CreateNewEntryRow/GetEntryRowCount 用实体键 F_OKVA_SubEntity_83g（双 Key）
     ///   物理表名  OKVA_t_Cust_Entry100031，分录主键 FBOSEntryID
     ///   父分录    = 生产订单明细（母项 = 明细行物料）
     ///   按钮事件  EntryBarItemClick（明细行按钮）
@@ -39,8 +39,11 @@ namespace kingdee.CustLI.Business.PlugIn
     {
         // ==================== 配置区（BOS 标识拟定占位，待用户提供实际值后替换） ====================
 
-        /// <summary>页签子表标识（CreateNewEntryRow 实体键 / DataObject 取集合）</summary>
-        private const string BomSubEntityKey = "OKVA_Cust_Entry100031";
+        /// <summary>页签子表实体键（CreateNewEntryRow/GetEntryRowCount 用，元数据实体键）</summary>
+        private const string BomSubEntryKey = "F_OKVA_SubEntity_83g";
+
+        /// <summary>页签子表 ORM 集合属性名（DataObject["..."] 取集合用，父级为 TreeEntity 树节点，实证双 Key）</summary>
+        private const string BomSubEntryCollectionKey = "OKVA_Cust_Entry100031";
 
         /// <summary>按钮标识（明细行上的"BOM整体展示"按钮，事件 EntryBarItemClick）</summary>
         private const string BomButtonKey = "ButtonClick";
@@ -150,7 +153,7 @@ namespace kingdee.CustLI.Business.PlugIn
             {
                 foreach (DynamicObject treeEntity in treeEntities)
                 {
-                    subEntity = treeEntity[BomSubEntityKey] as DynamicObjectCollection;
+                    subEntity = treeEntity[BomSubEntryCollectionKey] as DynamicObjectCollection;
                     if (subEntity != null) break;
                 }
             }
@@ -161,8 +164,9 @@ namespace kingdee.CustLI.Business.PlugIn
 
             foreach (BomRow row in rows)
             {
-                this.Model.CreateNewEntryRow(BomSubEntityKey);
-                int r = this.Model.GetEntryRowCount(BomSubEntityKey) - 1;
+                // CreateNewEntryRow/GetEntryRowCount 用实体键（非 ORM 名），避免空引用
+                this.Model.CreateNewEntryRow(BomSubEntryKey);
+                int r = this.Model.GetEntryRowCount(BomSubEntryKey) - 1;
 
                 this.Model.SetValue(FldSeq, row.Seq, r);
                 this.Model.SetValue(FldCode, row.Code, r);
