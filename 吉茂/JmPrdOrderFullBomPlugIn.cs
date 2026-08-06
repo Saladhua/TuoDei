@@ -38,7 +38,9 @@ namespace kingdee.CustLI.Business.PlugIn
     /// 可选列：材质 / 生产部门 / 备注 三列在物料清单暂未注册（2026-08-06 用户确认），
     /// 由 JmBomQueryHelper.EnableOptionalColumns 开关控制，未注册时 SQL 不引用、填充跳过，避免无效列名 207。
     ///
-    /// 递归查 BOM：逐层批量查 T_ENG_BOM 子项（每层一次 SQL，字典缓存，避免循环内查 DB）。
+    /// 递归查 BOM：先逐层批量查 T_ENG_BOM 子项建缓存（每层一次 SQL，字典缓存，避免循环内查 DB），
+    /// 再从母项深度优先遍历生成完整 BOM 树（明细=根物料 BOM 子项，子行也相当于 BOM 无限向下找直到叶子），
+    /// 序号按层级点分（父序号 + "." + 子项自身序号），如 1 / 1.1 / 1.1.1。
     /// </summary>
     [Description("吉茂-生产订单完整BOM页签"), HotUpdate]
     public class JmPrdOrderFullBomPlugIn : AbstractBillPlugIn
@@ -202,23 +204,24 @@ namespace kingdee.CustLI.Business.PlugIn
         internal static readonly bool EnableOptionalColumns = false;
 
         /// <summary>
-        /// 从根物料递归展开 BOM 至最底层，返回全部页签行。
-        /// 用队列逐层展开，每层一次性批量查子项（避免循环内查 DB）。
+        /// 从根物料递归展开 BOM 至全部叶子，返回全部页签行。
+        /// 两阶段：先逐层批量查询全部父子关系建缓存（每层一次 SQL，避免循环内查 DB），
+        /// 再从母项深度优先遍历生成完整 BOM 树，序号按层级点分（父序号 + "." + 子项自身序号）。
         /// </summary>
         /// <param name="ctx">上下文</param>
         /// <param name="rootMaterialId">根物料（梯号）内码</param>
-        /// <returns>展开行集合（BOM 树顺序）</returns>
+        /// <returns>展开行集合（BOM 树深度优先顺序，序号层级点分）</returns>
         public static List<BomRow> ExpandBom(Context ctx, long rootMaterialId)
         {
-            List<BomRow> result = new List<BomRow>();
+            // ---- 阶段一：逐层批量查询，收集 父物料内码 -> 子项行集合 缓存 ----
+            Dictionary<long, List<BomRow>> childrenMap = new Dictionary<long, List<BomRow>>();
 
-            // 待展开物料队列
-            Queue<long> parents = new Queue<long>();
-            parents.Enqueue(rootMaterialId);
-
-            // 防死循环：已展开过的物料内码
+            // 防死循环：同物料只入队展开收集一次
             HashSet<long> visited = new HashSet<long>();
             visited.Add(rootMaterialId);
+
+            Queue<long> parents = new Queue<long>();
+            parents.Enqueue(rootMaterialId);
 
             while (parents.Count > 0)
             {
@@ -226,7 +229,7 @@ namespace kingdee.CustLI.Business.PlugIn
                 List<long> layerParents = new List<long>(parents);
                 parents.Clear();
 
-                // 批量查本层所有父物料的 BOM 子项
+                // 批量查本层所有父物料的 BOM 子项（每层一次 SQL）
                 Dictionary<long, List<BomRow>> layerRows = QueryChildrenByParents(ctx, layerParents);
 
                 foreach (long parent in layerParents)
@@ -234,11 +237,11 @@ namespace kingdee.CustLI.Business.PlugIn
                     List<BomRow> childRows;
                     if (!layerRows.TryGetValue(parent, out childRows)) continue;
 
+                    childrenMap[parent] = childRows;
+
                     foreach (BomRow row in childRows)
                     {
-                        result.Add(row);
-
-                        // 子项若仍有下级 BOM，下一层展开（防死循环）
+                        // 子项若仍有下级 BOM，下一层收集（防死循环）
                         if (!visited.Contains(row.MaterialId))
                         {
                             visited.Add(row.MaterialId);
@@ -248,7 +251,42 @@ namespace kingdee.CustLI.Business.PlugIn
                 }
             }
 
+            // ---- 阶段二：深度优先树序输出，逐行生成层级点分序号（1 / 1.1 / 1.1.1） ----
+            HashSet<long> expanded = new HashSet<long>();
+            expanded.Add(rootMaterialId); // 防环：子项出现根物料时不再下钻
+
+            List<BomRow> result = new List<BomRow>();
+            ExpandBomTree(childrenMap, rootMaterialId, null, expanded, result);
             return result;
+        }
+
+        /// <summary>
+        /// 从父物料深度优先递归生成完整 BOM 树行，序号按层级点分拼接。
+        /// </summary>
+        /// <param name="childrenMap">父物料内码 -> 子项行集合 缓存</param>
+        /// <param name="materialId">当前父物料内码</param>
+        /// <param name="parentSeq">父行点分序号；为空表示第一层</param>
+        /// <param name="expanded">已展开过子级的物料内码（共享子件只展开一次，防死循环）</param>
+        /// <param name="result">收集结果行集合</param>
+        private static void ExpandBomTree(Dictionary<long, List<BomRow>> childrenMap, long materialId, string parentSeq, HashSet<long> expanded, List<BomRow> result)
+        {
+            List<BomRow> childRows;
+            if (!childrenMap.TryGetValue(materialId, out childRows)) return;
+
+            foreach (BomRow row in childRows)
+            {
+                // 序号 = 父序号为空则用该行自身序号（物料清单 FSEQ），否则 父序号 + "." + 自身序号
+                string seq = string.IsNullOrEmpty(parentSeq) ? row.Seq : parentSeq + "." + row.Seq;
+                row.Seq = seq;
+                result.Add(row);
+
+                // 子行也要相当于 BOM 母项无限向下找：子项物料若仍有下级 BOM（缓存含其子项）则继续递归，
+                // 该物料首次出现才下钻，重复出现（共享子件/环）保留行但不再重复展开其子树
+                if (expanded.Add(row.MaterialId))
+                {
+                    ExpandBomTree(childrenMap, row.MaterialId, seq, expanded, result);
+                }
+            }
         }
 
         /// <summary>
