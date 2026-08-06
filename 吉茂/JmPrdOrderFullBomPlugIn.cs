@@ -42,7 +42,7 @@ namespace kingdee.CustLI.Business.PlugIn
         /// <summary>页签子表标识（CreateNewEntryRow 实体键 / DataObject 取集合）</summary>
         private const string BomSubEntityKey = "F_OKVA_SubEntity_83g";
 
-        /// <summary>按钮标识（"BOM整体展示"按钮，事件 ButtonClick）</summary>
+        /// <summary>按钮标识（明细行上的"BOM整体展示"按钮，事件 EntryBarItemClick）</summary>
         private const string BomButtonKey = "ButtonClick";
 
         /// <summary>页签字段标识（与物理表 OKVA_t_Cust_Entry100031 对应）</summary>
@@ -64,15 +64,16 @@ namespace kingdee.CustLI.Business.PlugIn
         };
 
         /// <summary>
-        /// 按钮点击："BOM整体展示"——取当前明细行物料，递归展开 BOM 填充页签子表。
+        /// 明细行按钮点击："BOM整体展示"——取当前明细行物料，递归展开 BOM 填充页签子表。
+        /// 按钮挂在生产订单明细行（明细行按钮 EntryBarItemButton），事件 EntryBarItemClick。
         /// </summary>
-        /// <param name="e">按钮事件参数</param>
-        public override void ButtonClick(ButtonClickEventArgs e)
+        /// <param name="e">明细行按钮事件参数</param>
+        public override void EntryBarItemClick(BarItemClickEventArgs e)
         {
-            base.ButtonClick(e);
-            if (e.Key != BomButtonKey) return;
+            base.EntryBarItemClick(e);
+            if (!e.BarItemKey.Equals(BomButtonKey, StringComparison.OrdinalIgnoreCase)) return;
 
-            // 取当前明细行物料（梯号，母项）
+            // 取当前点击明细行物料（梯号，母项）；明细行按钮触发时当前选中行即按钮所在行
             long rootMaterialId = GetCurrentRowMaterialId();
             if (rootMaterialId <= 0)
             {
