@@ -26,8 +26,11 @@ namespace kingdee.CustLI.Business.PlugIn
     ///   按钮事件  ButtonClick
     ///
     /// 页签字段（序号=物料清单自身序号/层级，用户确认）：
-    ///   序号、图号、名称、数量、单位、材质、材料规格、工序1-8、生产部门、备注。
+    /// 序号、图号、名称、数量、单位、材质、材料规格、工序1-8、生产部门、备注。
     /// BOS 字段标识为拟定占位（F_CustLI_ 前缀，配置区），待用户提供实际标识后替换。
+    ///
+    /// 可选列：材质 / 生产部门 / 备注 三列在物料清单暂未注册（2026-08-06 用户确认），
+    /// 由 JmBomQueryHelper.EnableOptionalColumns 开关控制，未注册时 SQL 不引用、填充跳过，避免无效列名 207。
     ///
     /// 递归查 BOM：逐层批量查 T_ENG_BOM 子项（每层一次 SQL，字典缓存，避免循环内查 DB）。
     /// </summary>
@@ -154,17 +157,21 @@ namespace kingdee.CustLI.Business.PlugIn
                 this.Model.SetValue(FldName, row.Name, r);
                 this.Model.SetValue(FldQty, row.Qty, r);
                 this.Model.SetValue(FldUnit, row.Unit, r);
-                this.Model.SetValue(FldMaterial, row.Material, r);
                 this.Model.SetValue(FldSpec, row.Spec, r);
+
+                if (JmBomQueryHelper.EnableOptionalColumns)
+                {
+                    // 可选列已注册（EnableOptionalColumns=true）才填充，避免 BOS 无该字段抛异常
+                    this.Model.SetValue(FldMaterial, row.Material, r);
+                    this.Model.SetValue(FldDept, row.Dept, r);
+                    this.Model.SetValue(FldNote, row.Note, r);
+                }
 
                 for (int i = 0; i < ProcessFieldKeys.Length; i++)
                 {
                     string p = i < row.Processes.Count ? row.Processes[i] : "";
                     this.Model.SetValue(ProcessFieldKeys[i], p, r);
                 }
-
-                this.Model.SetValue(FldDept, row.Dept, r);
-                this.Model.SetValue(FldNote, row.Note, r);
             }
         }
     }
@@ -174,6 +181,14 @@ namespace kingdee.CustLI.Business.PlugIn
     /// </summary>
     public static class JmBomQueryHelper
     {
+        /// <summary>
+        /// 可选列开关：材质 / 生产部门 / 备注 三列在物料清单暂未注册（2026-08-06 用户确认）。
+        /// false（默认）=未注册：SQL 不引用、取值返回空、填充跳过，避免无效列名 207 与 BOS 无字段异常；
+        /// true=已注册：正常引用物料的材质与 BOM 子项的部门/备注并填充。
+        /// 用 static readonly（非 const）避免编译期常量导致的不可达代码，允许运行时按需调整。
+        /// </summary>
+        internal static readonly bool EnableOptionalColumns = false;
+
         /// <summary>
         /// 从根物料递归展开 BOM 至最底层，返回全部页签行。
         /// 用队列逐层展开，每层一次性批量查子项（避免循环内查 DB）。
@@ -240,6 +255,14 @@ namespace kingdee.CustLI.Business.PlugIn
                 map[parentIds[i]] = new List<BomRow>();
             }
 
+// 可选列：材质/生产部门/备注 未注册时不引用（EnableOptionalColumns=false 默认），
+            // 已注册（改为 true）后作为 SELECT 列参与查询，避免无效列名 207。
+            string optionalCols = JmBomQueryHelper.EnableOptionalColumns
+                ? @" ,child.F_CustLI_Material AS F_CustLI_Material
+                        ,ch.F_CustLI_BomDept AS FDept
+                        ,ch.F_CustLI_BomNote AS FNote"
+                : "";
+
             string ids = string.Join(",", parentIds);
             string sql = string.Format(
                 @"SELECT b.FMATERIALID AS FMaterialId
@@ -249,7 +272,6 @@ namespace kingdee.CustLI.Business.PlugIn
                         ,child.FNUMBER AS FNumber
                         ,childName.FNAME AS FName
                         ,childName.FSPECIFICATION AS FSpecification
-                        ,child.F_CustLI_Material AS F_CustLI_Material
                         ,unit.FNUMBER AS FUnitNumber
                         ,ch.F_CustLI_Process1 AS FP1
                         ,ch.F_CustLI_Process2 AS FP2
@@ -259,8 +281,7 @@ namespace kingdee.CustLI.Business.PlugIn
                         ,ch.F_CustLI_Process6 AS FP6
                         ,ch.F_CustLI_Process7 AS FP7
                         ,ch.F_CustLI_Process8 AS FP8
-                        ,ch.F_CustLI_BomDept AS FDept
-                        ,ch.F_CustLI_BomNote AS FNote
+                        {2}
                   FROM T_ENG_BOM b
                   INNER JOIN T_ENG_BOMCHILD ch ON ch.FBOMID = b.FID
                   INNER JOIN T_BD_MATERIAL child ON child.FMATERIALID = ch.FMATERIALID
@@ -271,7 +292,7 @@ namespace kingdee.CustLI.Business.PlugIn
                   WHERE b.FMATERIALID IN ({1})
                     AND b.FDOCUMENTSTATUS IN ('A','C')
                   ORDER BY b.FMATERIALID, ch.FSEQ",
-                ctx.UserLocale.LCID, ids);
+                ctx.UserLocale.LCID, ids, optionalCols);
 
             var dbService = ServiceFactory.GetDBService(ctx);
             DynamicObjectCollection rows = dbService.ExecuteDynamicObject(ctx, sql);
@@ -289,11 +310,12 @@ namespace kingdee.CustLI.Business.PlugIn
                     Code = ObjectToString(row["FNumber"]),
                     Name = ObjectToString(row["FName"]),
                     Qty = ObjectToString(row["FQty"]),
-                    Unit = ObjectToString(row["FUnitNumber"]),
-                    Material = ObjectToString(row["F_CustLI_Material"]),
+Unit = ObjectToString(row["FUnitNumber"]),
+                    // 材质/生产部门/备注为可选列：未注册（EnableOptionalColumns=false）时列不存在，不能访问 row[键]
+                    Material = JmBomQueryHelper.EnableOptionalColumns ? ObjectToString(row["F_CUSTLI_Material"]) : "",
                     Spec = ObjectToString(row["FSpecification"]),
-                    Dept = ObjectToString(row["FDept"]),
-                    Note = ObjectToString(row["FNote"]),
+                    Dept = JmBomQueryHelper.EnableOptionalColumns ? ObjectToString(row["FDept"]) : "",
+                    Note = JmBomQueryHelper.EnableOptionalColumns ? ObjectToString(row["FNote"]) : "",
                 };
                 br.Processes.Add(ObjectToString(row["FP1"]));
                 br.Processes.Add(ObjectToString(row["FP2"]));
