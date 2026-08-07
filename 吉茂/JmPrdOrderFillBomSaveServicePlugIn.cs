@@ -6,6 +6,7 @@ using Kingdee.BOS;
 using Kingdee.BOS.Core;
 using Kingdee.BOS.Core.DynamicForm.PlugIn;
 using Kingdee.BOS.Core.DynamicForm.PlugIn.Args;
+using Kingdee.BOS.Core.Metadata.EntityElement;
 using Kingdee.BOS.Orm.DataEntity;
 using Kingdee.BOS.Util;
 
@@ -54,6 +55,9 @@ namespace kingdee.CustLI.Business.PlugIn
 
         /// <summary>页签子表集合键（ORM 名，取集合用；实体键 F_OKVA_Entity_83g 取集合会空引用）</summary>
         private const string BomSubCollectionKey = "OKVA_Cust_Entry100031";
+
+        /// <summary>页签子表实体键（BusinessInfo.GetEntryEntity 元数据取子实体用，与表单插件实体键一致）</summary>
+        private const string BomSubEntityKey = "F_OKVA_SubEntity_83g";
 
         /// <summary>
         /// 生产订单表头备注字段（标准字段 FDescription，ORM 属性名去 F = Description，用户确认 2026-08-07）
@@ -225,21 +229,34 @@ namespace kingdee.CustLI.Business.PlugIn
         /// </summary>
         /// <param name="entry">生产订单明细行对象（页签子表父行）</param>
         /// <param name="rows">展开的 BOM 行集合</param>
+        /// <summary>负数临时主键计数器：服务端新增子实体行需负 EntryId 供 ORM 识别为"待新增行"并由框架生成正式主键</summary>
+        private long _tempSubRowId = 0;
+
         private void FillSubEntity(DynamicObject entry, List<BomRow> rows)
         {
-            DynamicObjectCollection sub =
-                entry[BomSubCollectionKey] as DynamicObjectCollection;
+            DynamicObjectCollection sub = null;
+            SubEntryEntity subEntry = this.BusinessInfo.GetEntryEntity(BomSubEntityKey) as SubEntryEntity;
+            if (subEntry != null)
+            {
+                sub = subEntry.DynamicProperty.GetValue(entry) as DynamicObjectCollection;
+            }
+            if (sub == null)
+            {
+                sub = entry[BomSubCollectionKey] as DynamicObjectCollection;
+            }
             if (sub == null) return;
 
             // 清空旧数据，再重新填充（与表单插件 DeleteEntryRow 全清语义一致）
             sub.Clear();
 
             // 建行用子单据体类型的 CreateInstance()（林蓝 LinLanXQMatPackSyncServicePlugIn 实证，
-            // 非裸 new DynamicObject：CreateInstance 创建的 DataObject 携带动态实体元数据，
-            // ORM 保存时能将新行识别为"新增子行"并由框架分配 FBOSEntryID；裸 new 主键为 0 全冲突）
+            // 非裸 new DynamicObject：CreateInstance 创建行携带动态实体元数据，ORM 能正确持久化。
+            // 每行赋一个递减负数临时主键（FBOSEntryID 物理列，ORM 属性名 Id），
+            // 框架保存时识别为"新增子目标实体行"并转换为正式主键，避免主键全 0 撞 pk_OKVA_t_Cust_Entry100031）
             foreach (BomRow row in rows)
             {
                 DynamicObject newRow = (DynamicObject)sub.DynamicCollectionItemPropertyType.CreateInstance();
+                newRow["Id"] = _tempSubRowId--;
 
                 newRow[FldSeq] = row.Seq;
                 newRow[FldCode] = row.Code;
