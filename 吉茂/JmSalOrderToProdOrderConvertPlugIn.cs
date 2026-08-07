@@ -31,39 +31,8 @@ namespace kingdee.CustLI.Business.PlugIn
     [Description("吉茂-销售订单下推生产订单携带工艺要求"), HotUpdate]
     public class JmSalOrderToProdOrderConvertPlugIn : AbstractConvertPlugIn
     {
-        // ==================== 配置区（字段标识为拟定占位，待用户提供实际值后替换） ====================
-
         /// <summary>目标生产订单表头备注字段（标准字段 FDescription，ORM 属性名去 F = Description，用户确认 2026-08-07）</summary>
         private const string TargetDescriptionFieldKey = "Description";
-
-        /// <summary>工艺组件字段清单：[字段标识, 中文名]，仅已注册列（RegisteredTechColumns）且非空值参与拼接</summary>
-        /// 主轴/下部 映射到销售订单已存在字段（F_CUSTLI_AXISCODE 主轴图号 / F_CUSTLI_DOWNCODE 下模组料号）；
-        /// 其余 12 个（上部/3D模组/链条/主轴组件/梯级链轮×2/驱动链轮×2/扶手轴组件/轴/制动器/抱闸拉杆）
-        /// 在 T_SAL_ORDERENTRY 无对应列（实测 2026-08-05），保留占位但值为空，不参与 SQL 与拼接。
-        private static readonly string[,] TechFieldMap = new string[,]
-        {
-            { "F_CustLI_UpperPart", "上部" },
-            { "F_CustLI_3DModule", "3D模组" },
-            { "F_CustLI_Chain", "链条" },
-            { "F_CustLI_AxisAssy", "主轴组件" },
-            { "F_CUSTLI_AXISCODE", "主轴" },
-            { "F_CustLI_StepSprocket", "梯级链轮" },
-            { "F_CustLI_StepSprocketNonStd", "梯级链轮(非标)" },
-            { "F_CustLI_DriveSprocket", "驱动链轮" },
-            { "F_CustLI_DriveSprocketNonStd", "驱动链轮(非标)" },
-            { "F_CustLI_HandrailAssy", "扶手轴组件" },
-            { "F_CustLI_Shaft", "轴" },
-            { "F_CustLI_Brake", "制动器" },
-            { "F_CustLI_BrakeRod", "抱闸拉杆" },
-            { "F_CUSTLI_DOWNCODE", "下部" }
-        };
-
-        /// <summary>T_SAL_ORDERENTRY 中真实存在（已注册）的工艺列标识白名单，仅白名单列参与 SQL SELECT 与取值</summary>
-        private static readonly HashSet<string> RegisteredTechColumns = new HashSet<string>
-        {
-            "F_CUSTLI_AXISCODE",
-            "F_CUSTLI_DOWNCODE"
-        };
 
         /// <summary>
         /// 转换完成后，将销售订单明细工艺组件字段汇总写入生产订单表头备注字段。
@@ -111,7 +80,7 @@ namespace kingdee.CustLI.Business.PlugIn
             if (srcSIds.Count == 0) return;
 
             // SQL 批量查源销售订单明细工艺字段（源分录内码集合）
-            Dictionary<long, string> dctSrcSIdToMemo = QuerySrcTechMemo(e, srcSIds);
+            Dictionary<long, string> dctSrcSIdToMemo = JmSaleTechMemoHelper.GetSrcEntryTechMemo(Context, srcSIds);
 
             // 全部源分录工艺文本汇总为一个整体文本，写入目标生产订单表头备注字段
             StringBuilder sb = new StringBuilder();
@@ -133,76 +102,6 @@ namespace kingdee.CustLI.Business.PlugIn
             if (rootRows == null || rootRows.Length == 0) return;
             DynamicObject targetBill = rootRows[0].DataEntity;
             targetBill[TargetDescriptionFieldKey] = sb.ToString();
-        }
-
-        /// <summary>
-        /// SQL 批量查源销售订单明细工艺字段，按源分录内码返回已拼接文本。
-        /// </summary>
-        /// <param name="e">转换事件参数（取源表单标识）</param>
-        /// <param name="srcSIds">源分录内码集合</param>
-        /// <returns>源分录内码 → 工艺字段汇总文本</returns>
-        private Dictionary<long, string> QuerySrcTechMemo(AfterConvertEventArgs e, HashSet<long> srcSIds)
-        {
-            Dictionary<long, string> map = new Dictionary<long, string>();
-            if (srcSIds.Count == 0) return map;
-
-            // 拼 SELECT 字段列表（源明细表别名 a1）；仅白名单中的真实已注册列参与，避免引用不存在的列报 207
-            StringBuilder selectFields = new StringBuilder();
-            bool hasSelect = false;
-            for (int i = 0; i < TechFieldMap.GetLength(0); i++)
-            {
-                string fieldKey = TechFieldMap[i, 0];
-                if (!RegisteredTechColumns.Contains(fieldKey)) continue;
-                if (hasSelect) selectFields.Append(",");
-                selectFields.Append("a1.").Append(fieldKey);
-                hasSelect = true;
-            }
-
-            string ids = string.Join(",", srcSIds.ToArray());
-            string sql = string.Format(
-                @"SELECT a1.FENTRYID AS FENTRYID,{0}
-                  FROM T_SAL_ORDERENTRY a1
-                  WHERE a1.FENTRYID IN ({1})",
-                selectFields, ids);
-
-            var dbService = ServiceFactory.GetDBService(Context);
-            DynamicObjectCollection rows = dbService.ExecuteDynamicObject(Context, sql);
-            if (rows == null || rows.Count == 0) return map;
-
-            foreach (DynamicObject row in rows)
-            {
-                long entryId = Convert.ToInt64(row["FENTRYID"]);
-                StringBuilder sb = new StringBuilder();
-                for (int i = 0; i < TechFieldMap.GetLength(0); i++)
-                {
-                    string fieldKey = TechFieldMap[i, 0];
-                    // 仅白名单中的真实已注册列参与拼接；否则字段无值（留空不显示）
-                    if (!RegisteredTechColumns.Contains(fieldKey)) continue;
-                    string name = TechFieldMap[i, 1];
-                    string value = ObjectToString(row[fieldKey]);
-                    if (string.IsNullOrEmpty(value)) continue;
-
-                    if (sb.Length > 0) sb.AppendLine();
-                    sb.Append(name).Append(":").Append(value);
-                }
-                if (sb.Length > 0)
-                {
-                    map[entryId] = sb.ToString();
-                }
-            }
-
-            return map;
-        }
-
-        /// <summary>
-        /// 对象转字符串（null/DBNull 转空串）。
-        /// </summary>
-        /// <param name="value">对象</param>
-        /// <returns>字符串</returns>
-        private static string ObjectToString(object value)
-        {
-            if (value == null || value == DBNull.Value) return "";
-            return value.ToString();
         }
     }
 }

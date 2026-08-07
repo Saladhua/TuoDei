@@ -215,6 +215,7 @@
     <Compile Include="吉茂\公有方法\JmMaterialHelper.cs" />
     <Compile Include="吉茂\公有方法\JmSalOrderSaveHelper.cs" />
     <Compile Include="吉茂\公有方法\JmBomGenerateHelper.cs" />
+    <Compile Include="吉茂\公有方法\JmSaleTechMemoHelper.cs" />
     <Compile Include="吉茂\JmSalOrderListImportPlugIn.cs" />
     <Compile Include="吉茂\JmSalOrderImportPlugIn.cs" />
     <Compile Include="吉茂\JmSalOrderAuditCreateBomPlugIn.cs" />

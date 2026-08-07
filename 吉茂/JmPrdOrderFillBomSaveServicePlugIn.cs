@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.ComponentModel;
+using System.Text;
 using Kingdee.BOS;
 using Kingdee.BOS.Core;
 using Kingdee.BOS.Core.DynamicForm.PlugIn;
@@ -10,11 +11,12 @@ using Kingdee.BOS.Util;
 
 namespace kingdee.CustLI.Business.PlugIn
 {
-    /// <summary>
-    /// 吉茂-生产订单保存时自动填充"完整BOM"页签子表 操作插件
+/// <summary>
+    /// 吉茂-生产订单保存时自动填充"完整BOM"页签子表 + 写入工艺要求 操作插件
     ///
     /// 目的（用户确认 2026-08-07）：生产订单（PRD_MO）保存时，自动为每行明细（母项=梯号物料）
-    ///   递归展开物料清单（BOM）并填充页签子表，替代用户逐个点击"BOM整体展示"按钮。
+    ///   递归展开物料清单（BOM）并填充页签子表，替代用户逐个点击"BOM整体展示"按钮；
+    ///   同时将来源销售订单明细工艺要求汇总写入生产订单表头备注 FDescription。
     ///
     /// 触发：PRD_MO 单据保存（Save）操作，事件 BeforeExecuteOperationTransaction
     ///   （保存事务前置，事务内，之后框架执行核心保存逻辑，可一并持久化）。
@@ -22,6 +24,11 @@ namespace kingdee.CustLI.Business.PlugIn
     ///
     /// 数据访问红线（AGENTS.md §8 事故复盘结论）：Save 场景 e.DataEntitys 可能 null，
     ///   必须使用 e.SelectedRows（元素为 ExtendedDataEntity，取其 DataEntity 为单据 DynamicObject）。
+    ///
+    /// 工艺要求补充（用户确认 2026-08-07）：明细行来源销售订单头内码字段 FSALEORDERID
+    ///   （指向销售订单【表头】FID），工艺字段存在销售订单明细分录 T_SAL_ORDERENTRY，
+    ///   由 JmSaleTechMemoHelper.GetSaleOrderTechMemo 按销售订单头内码批量反查全部分录工艺、
+    ///   逐销售订单换行连接写入表头 Description。无销售来源（手工新增非下推）保留表头现状不写入。
     ///
     /// 页签子表元数据（用户提供，与 JmPrdOrderFullBomPlugIn 一致）：
     ///   子表实体键   F_OKVA_Entity_83g（ORM 调取值会空引用，仅作注释说明）
@@ -31,21 +38,42 @@ namespace kingdee.CustLI.Business.PlugIn
     ///
     /// 填充字段（序号=物料清单自身序号/层级，数量=BOM 子项分子，可选列受 EnableOptionalColumns 开关控制）：
     ///   序号/图号/名称/数量/单位/材料规格 + 工序1-8 +（可选）材质/生产部门/备注。
-    /// 与 JmPrdOrderFullBomPlugIn.FillSubEntity 保持相同填充规则，保证两入口结果一致。
+    /// 与 JmPrdOrderFullBomPlugIn.FillSubEntity 保持相同填充规则，保证两入口一致。
     /// </summary>
     [Description("吉茂-生产订单保存时自动填充完整BOM页签"), HotUpdate]
     public class JmPrdOrderFillBomSaveServicePlugIn : AbstractOperationServicePlugIn
     {
         // ==================== 配置区（BOS 标识拟定占位，与 JmPrdOrderFullBomPlugIn 保持一致） ====================
 
-        /// <summary>生产订单明细行集合键（与表单插件 Model.DataObject["MOEntry"] 一致）</summary>
-        private const string MoEntryCollectionKey = "MOEntry";
+        /// <summary>
+        /// 生产订单明细行集合键。取值取 ORM 实体标识 TreeEntity
+        /// （注意：ORM 键不同于表单控件键 MOEntry，表单插件 Model.DataObject["MOEntry"] 用 MOEntry；
+        ///   本插件在 BeforeExecuteOperationTransaction 取集合及 OnPreparePropertys 声明字段均用 ORM 标识 TreeEntity）
+        /// </summary>
+        private const string MoEntryCollectionKey = "TreeEntity";
 
         /// <summary>页签子表集合键（ORM 名，取集合用；实体键 F_OKVA_Entity_83g 取集合会空引用）</summary>
         private const string BomSubCollectionKey = "OKVA_Cust_Entry100031";
 
-        /// <summary>明细行物料引用字段标识（母项，与表单插件一致）</summary>
-        private const string FldMaterial = "FMaterialId";
+        /// <summary>
+        /// 生产订单表头备注字段（标准字段 FDescription，ORM 属性名去 F = Description，用户确认 2026-08-07）
+        /// 工艺要求与下推转换插件 JmSalOrderToProdOrderConvertPlugIn 同一落点。
+        /// </summary>
+        private const string TargetDescriptionFieldKey = "Description";
+
+        /// <summary>
+        /// 生产订单明细行来源销售订单头内码字段标识（用户确认 2026-08-07：MOEntry 明细 FSALEORDERID = 销售订单头内码 FID）
+        /// 取值取 ORM 实体字段标识 SALEORDERID（ORM 标识去 F，物理字段为 FSALEORDERID；
+        ///   与 MoEntryCollectionKey 用 ORM 标识 TreeEntity 同理）
+        /// 工艺字段存在销售订单明细分录，需按销售订单头内码批量反查。
+        /// </summary>
+        private const string FldSaleOrderId = "SALEORDERID";
+
+        /// <summary>
+        /// 明细行物料引用字段标识（母项）。取值取 ORM 实体字段标识 MaterialId
+        /// （注意：ORM 字段标识不同于表单控件键 FMaterialId，与 MoEntryCollectionKey 用 ORM 标识 TreeEntity 同理）
+        /// </summary>
+        private const string FldMaterial = "MaterialId";
 
         /// <summary>页签字段标识（与物理表 OKVA_t_Cust_Entry100031 对应，自定义字段保留 F）</summary>
         private const string FldSeq = "F_CustLI_BomSeq";        // 序号（=物料清单自身序号）
@@ -73,8 +101,10 @@ namespace kingdee.CustLI.Business.PlugIn
         {
             base.OnPreparePropertys(e);
             e.FieldKeys.Add(FldMaterial);
+            e.FieldKeys.Add(FldSaleOrderId);
             e.FieldKeys.Add(MoEntryCollectionKey);
             e.FieldKeys.Add(BomSubCollectionKey);
+            e.FieldKeys.Add(TargetDescriptionFieldKey);
         }
 
         /// <summary>
@@ -99,9 +129,18 @@ namespace kingdee.CustLI.Business.PlugIn
                     billObj[MoEntryCollectionKey] as DynamicObjectCollection;
                 if (entryCol == null) continue;
 
+                // 收集该单全部来源销售订单头内码（FSALEORDERID，用户确认 = 销售订单头内码 FID），用于工艺要求反查
+                HashSet<long> saleOrderFids = new HashSet<long>();
+
                 foreach (DynamicObject entry in entryCol)
                 {
                     if (entry == null) continue;
+
+                    long saleOrderId = GetReferenceId(entry[FldSaleOrderId]);
+                    if (saleOrderId > 0 && saleOrderFids.Contains(saleOrderId) == false)
+                    {
+                        saleOrderFids.Add(saleOrderId);
+                    }
 
                     // 取母项物料（梯号）；无物料跳过该行
                     long rootMaterialId = GetMaterialId(entry[FldMaterial]);
@@ -114,7 +153,56 @@ namespace kingdee.CustLI.Business.PlugIn
                     // 取该明细行下页签子表集合并清空重填
                     FillSubEntity(entry, rows);
                 }
+
+                // 工艺要求汇总写入表头备注（与下推转换插件同一落点 FDescription，ORM 去 F=Description）
+                // 无销售来源（手工新增非下推）保留表头现状，不写入
+                FillSaleDescription(billObj, saleOrderFids);
             }
+        }
+
+        /// <summary>
+        /// 工艺要求汇总写入生产订单表头备注字段：按收集到的销售订单头内码批量反查
+        /// 销售订单明细分录工艺字段（JmSaleTechMemoHelper.GetSaleOrderTechMemo），
+        /// 逐销售订单换行连接为一个整体文本，写入 billObj[Description]。
+        /// 无销售来源（saleOrderFids 为空）保留表头现状，不写入。
+        /// </summary>
+        /// <param name="billObj">生产订单单据对象（表头根实体）</param>
+        /// <param name="saleOrderFids">来源销售订单头内码集合</param>
+        private void FillSaleDescription(DynamicObject billObj, HashSet<long> saleOrderFids)
+        {
+            if (saleOrderFids == null || saleOrderFids.Count == 0) return;
+
+            // SQL 批量反查销售订单明细分录工艺字段，按销售订单头内码返回该单汇总文本
+            Dictionary<long, string> dctFidToMemo = JmSaleTechMemoHelper.GetSaleOrderTechMemo(this.Context, saleOrderFids);
+            if (dctFidToMemo.Count == 0) return;
+
+            StringBuilder sb = new StringBuilder();
+            foreach (long fid in saleOrderFids)
+            {
+                string memo;
+                if (dctFidToMemo.TryGetValue(fid, out memo))
+                {
+                    if (sb.Length > 0) sb.AppendLine();
+                    sb.Append(memo);
+                }
+            }
+            if (sb.Length == 0) return;
+
+            // 生产订单表头根实体，直接写备注字段（标准字段 ORM 去 F = Description）
+            billObj[TargetDescriptionFieldKey] = sb.ToString();
+        }
+
+        /// <summary>
+        /// 取基础资料引用字段的内码（引用对象取 DynamicObject["Id"]，否则转 long）。
+        /// </summary>
+        /// <param name="refObj">引用字段值</param>
+        /// <returns>内码；无返回 0</returns>
+        private long GetReferenceId(object refObj)
+        {
+            if (refObj == null) return 0;
+            DynamicObject refData = refObj as DynamicObject;
+            if (refData != null) return Convert.ToInt64(refData["Id"]);
+            return Convert.ToInt64(refObj);
         }
 
         /// <summary>
@@ -146,9 +234,12 @@ namespace kingdee.CustLI.Business.PlugIn
             // 清空旧数据，再重新填充（与表单插件 DeleteEntryRow 全清语义一致）
             sub.Clear();
 
+            // 建行用子单据体类型的 CreateInstance()（林蓝 LinLanXQMatPackSyncServicePlugIn 实证，
+            // 非裸 new DynamicObject：CreateInstance 创建的 DataObject 携带动态实体元数据，
+            // ORM 保存时能将新行识别为"新增子行"并由框架分配 FBOSEntryID；裸 new 主键为 0 全冲突）
             foreach (BomRow row in rows)
             {
-                DynamicObject newRow = new DynamicObject(sub.DynamicCollectionItemPropertyType);
+                DynamicObject newRow = (DynamicObject)sub.DynamicCollectionItemPropertyType.CreateInstance();
 
                 newRow[FldSeq] = row.Seq;
                 newRow[FldCode] = row.Code;
