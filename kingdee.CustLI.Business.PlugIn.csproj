@@ -220,6 +220,7 @@
     <Compile Include="吉茂\JmSalOrderAuditCreateBomPlugIn.cs" />
     <Compile Include="吉茂\JmSalOrderToProdOrderConvertPlugIn.cs" />
     <Compile Include="吉茂\JmPrdOrderFullBomPlugIn.cs" />
+    <Compile Include="吉茂\JmPrdOrderFillBomSaveServicePlugIn.cs" />
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
 </Project>
